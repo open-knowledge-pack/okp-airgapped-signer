@@ -1,0 +1,5435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- Why explicit form-action / frame-ancestors / base-uri: CSP's default-src
+     fallback does NOT cover those three directives, so omitting them leaves
+     implicit 'self' (or no restriction for frame-ancestors). Set all three to
+     'none' so a stray <form> couldn't post anywhere, the page can't be framed,
+     and a <base> tag couldn't move where relative URLs point. -->
+<!-- Why manifest-src / worker-src 'self' and 'self' in img-src: the Home
+     Screen app needs the manifest, the service worker and the touch icon
+     from its own origin; default-src 'none' would block all three. Under
+     file:// nothing is fetched, so the page there is unchanged. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: 'self'; manifest-src 'self'; worker-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'">
+<title>okpair gap-signer</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#111111">
+<style>
+  :root { color-scheme: dark; }
+  html, body {
+    background: #111;
+    color: #ddd;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    margin: 0;
+    padding: 0;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 18px; margin: 8px 0 16px; color: #eee; }
+  h2 { font-size: 15px; margin: 16px 0 8px; color: #ccc; font-weight: normal; }
+  .hidden { display: none; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .word {
+    display: flex;
+    align-items: center;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 3px;
+    padding: 2px 4px;
+    width: calc((100% - 6 * 6px) / 6);
+    box-sizing: border-box;
+  }
+  .word.bad  { border-color: #d33; }
+  .word.good { border-color: #2a4; }
+  .word .n {
+    color: #666;
+    font-size: 11px;
+    width: 22px;
+    text-align: right;
+    padding-right: 6px;
+    flex-shrink: 0;
+  }
+  .word input {
+    background: transparent;
+    border: 0;
+    color: #eee;
+    font: inherit;
+    width: 100%;
+    outline: none;
+    padding: 4px 0;
+  }
+  textarea, input[type=text] {
+    width: 100%;
+    box-sizing: border-box;
+    background: #1a1a1a;
+    color: #eee;
+    border: 1px solid #333;
+    border-radius: 3px;
+    padding: 6px;
+    font: inherit;
+  }
+  textarea { min-height: 100px; }
+  /* Why a narrow box: the value is one short word, and the full-width rule
+     above would put the label on one line and the word alone on the next. */
+  #namespace { width: 6em; display: inline-block; margin: 0 6px; }
+  button {
+    background: #222;
+    color: #eee;
+    border: 1px solid #444;
+    border-radius: 3px;
+    padding: 6px 12px;
+    font: inherit;
+    cursor: pointer;
+    margin: 4px 4px 4px 0;
+  }
+  button:hover:not([disabled]) { background: #2a2a2a; }
+  button:disabled { color: #666; cursor: not-allowed; }
+  button.primary { background: #2a4; border-color: #2a4; color: #fff; }
+  button.primary:hover:not([disabled]) { background: #3b5; }
+  button.danger { background: #d33; border-color: #d33; color: #fff; }
+  button.danger:hover:not([disabled]) { background: #e44; }
+  .err { color: #f66; min-height: 1.2em; padding: 4px 0; font-size: 13px; }
+  .ok  { color: #6f6; }
+  .muted { color: #888; font-size: 12px; padding: 4px 0; }
+  .warn {
+    background: #4a2a00;
+    color: #ffcf80;
+    border: 1px solid #d33;
+    border-radius: 3px;
+    padding: 8px 10px;
+    margin: 4px 0 12px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .fp {
+    font-size: 14px;
+    background: #0a0a0a;
+    border: 1px solid #333;
+    padding: 8px;
+    border-radius: 3px;
+    word-break: break-all;
+  }
+  .qr-box {
+    background: #fff;
+    padding: 12px;
+    display: inline-block;
+    border-radius: 3px;
+    margin: 8px 0;
+  }
+  .qr-box img { display: block; image-rendering: pixelated; }
+  .qr-payload {
+    font-size: 11px;
+    color: #888;
+    word-break: break-all;
+    white-space: pre-wrap; /* the SSHSIG PEM block is multi-line */
+    max-width: 480px;
+    margin-top: 4px;
+  }
+  hr { border: 0; border-top: 1px solid #222; margin: 16px 0; }
+  details summary { cursor: pointer; color: #888; font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>okpair gap-signer</h1>
+
+  <!-- ============================================================ -->
+  <!-- Screen 1: Seed Entry                                         -->
+  <!-- ============================================================ -->
+  <section id="screen1">
+    <h2>1. Enter 24-word BIP39 mnemonic</h2>
+    <div id="words" class="row"></div>
+    <!-- Why: passphrase is part of BIP39's threat model — same words +
+         different passphrase = different key. Field is mandatory in the
+         UI per spec; empty value is the canonical default. type="text"
+         (not password): air-gapped, shoulder-surfing out of scope, and a
+         visible field lets the user catch typos. -->
+    <h2>BIP39 passphrase (optional — leave blank if you don't use one)</h2>
+    <input id="passphrase" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <div class="muted">
+      Blank is fine and is the canonical default (matches the documented
+      test vectors). Any non-empty passphrase becomes part of the key and
+      must be remembered alongside the 24 words — losing it loses the key,
+      no recovery. The same words with a different passphrase produce a
+      different key.
+    </div>
+    <div id="seedErr" class="err"></div>
+    <div>
+      <button id="deriveBtn" class="primary">Derive Key</button>
+      <button id="pasteBtn">Paste full phrase</button>
+      <button id="clearBtn">Clear words</button>
+    </div>
+    <details>
+      <summary>Test vectors (development only)</summary>
+      <!--
+        Expected Ed25519 public keys (hex), pre-computed with the reference
+        pipeline (bip39.mnemonicToSeedSync + nacl.sign.keyPair.fromSeed):
+          tv1 (abandon..art):   1de352e44cd333672593f2334a730e180aaf290de89aa16d480de594e34e2961
+          tv2 (zoo..vote):      ea1c7d41a6d70293194f45206ab4dca257d9c252fe2c53779fdef2a2bd05cd47
+          tv3 (letter..bless):  e88ff5f87c809d2921bf2ee8bd3a176d6fc66b9f90230920f1246b5472c22c13
+        All three have valid BIP39 checksums.
+      -->
+      <button id="tv1">Test Vector 1</button>
+      <button id="tv2">Test Vector 2</button>
+      <button id="tv3">Test Vector 3</button>
+      <button id="selfTestBtn">Verify test vectors</button>
+      <!-- Why this button exists: the expected-pubkey hex above is a claim
+           that's not enforced anywhere else. If a future change to the
+           derivation pipeline broke the keys, this is the single tap that
+           catches it. Runs all four fixtures — these three at the empty
+           passphrase plus tv1 under "PROPHET" — through the page's own
+           validate→PBKDF2→fromSeed path and asserts the resulting pubkeys
+           match the documented hex. -->
+      <div id="selfTestResult" class="muted"></div>
+    </details>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Screen 2: Signing workspace                                  -->
+  <!-- ============================================================ -->
+  <section id="screen2" class="hidden">
+    <!-- Shown only when the derived public key matches one of the documented
+         BIP39 test-vector pubkeys. The mnemonic is published; anyone can
+         sign with the same key. Visible warning >> a misclick into a known
+         mnemonic going unnoticed. -->
+    <div id="testKeyWarn" class="warn hidden"></div>
+    <h2>Device identity</h2>
+    <div>Public-key fingerprint (same as <code>ssh-keygen -lf key.pub</code>):</div>
+    <div id="fp" class="fp"></div>
+    <div>
+      <button id="exportPubBtn">Export Public Key (QR)</button>
+      <button id="lockBtn" class="danger">Clear &amp; Lock</button>
+    </div>
+
+    <div id="pubQrBox" class="hidden">
+      <h2>Public key QR</h2>
+      <div class="qr-box"><img id="pubQrImg" alt="public key QR"></div>
+      <div class="qr-payload" id="pubQrPayload"></div>
+    </div>
+
+    <hr>
+
+    <h2>Sign a message</h2>
+    <textarea id="msg" placeholder="Type or paste the message to sign"></textarea>
+    <!-- Why this switch, and why it is on by default: what this page signs
+         in practice is a nu-multiproof root statement — one line that the
+         file on disk ends with exactly one LF. A textarea never holds that
+         final LF unless the user presses Enter after the line, and a
+         forgotten Enter was the one manual step of the round trip that could
+         go wrong: ssh-keygen reports a bad signature for text that looks
+         identical on screen. So the file form is the default and the raw
+         form is the opt-out. In file mode a text that already ends with a
+         newline is refused rather than signed with two — the page cannot
+         tell a deliberate second LF from a stray Enter, and refusing costs
+         one click while a wrong signature costs a whole round trip. -->
+    <label class="muted">
+      <input type="checkbox" id="asFile" checked>
+      Sign as a file: one LF is appended, so the bytes match a file that ends
+      with a newline (what <code>nu-multiproof</code> writes). Untick to sign
+      the text exactly as typed.
+    </label>
+    <!-- Why a namespace field: SSHSIG bakes the namespace into the signed
+         bytes, and each verifier asks for one by name. "file" is what
+         `ssh-keygen -Y sign -n file` uses for arbitrary files, so it is the
+         default. Git checks a commit's SSHSIG under "git" with no option to
+         change it, so signing a commit object (the text `git cat-file -p HEAD`
+         prints, with "Sign as a file" unticked) needs "git" here, and a block
+         made under "file" can never sign a commit. -->
+    <label class="muted">
+      Namespace:
+      <input type="text" id="namespace" value="file" spellcheck="false" autocapitalize="off" autocomplete="off">
+      <code>file</code> for a file, <code>git</code> for a commit object.
+    </label>
+    <div>
+      <button id="signBtn" class="primary">Sign</button>
+    </div>
+    <div id="signErr" class="err"></div>
+
+    <div id="sigQrBox" class="hidden">
+      <h2>Signature QR</h2>
+      <div class="qr-box"><img id="sigQrImg" alt="signature QR"></div>
+      <div class="qr-payload" id="sigQrPayload"></div>
+      <!-- Why this hint: the QR carries the SSHSIG block (signature + public
+           key), but NOT the message text (would balloon the QR for arbitrary
+           inputs). The verifier must already have the exact message bytes
+           out-of-band. The trailing-newline note is there because it is the
+           first failure every real verifier hits: an editor adds a final
+           newline the textarea never had, and ssh-keygen then reports a bad
+           signature for a message that looks identical. -->
+      <div class="muted">
+        QR contains an OpenSSH signature block (verify with
+        <code>ssh-keygen -Y verify -n &lt;namespace&gt;</code>, the namespace
+        chosen above). It does not contain the
+        message. The verifier needs the exact message bytes out-of-band:
+        line endings become LF; with "Sign as a file" ticked the bytes are
+        the text plus one trailing LF, unticked they are the text exactly as
+        typed.
+      </div>
+    </div>
+  </section>
+
+  <!-- Why a visible status: a service worker that failed to register would
+       otherwise fail silently, and the user would learn it offline. -->
+  <div id="offline" class="muted hidden"></div>
+</main>
+
+<!--
+================================================================================
+LIBRARY: tweetnacl  v1.0.3
+Source: https://www.npmjs.com/package/tweetnacl  (file: nacl.min.js)
+SHA-256 of the single-line `!function(i){...}(...);` script body below
+matches `nacl.min.js` from tweetnacl@1.0.3 byte-for-byte:
+  973cc5733cc7432e30ee4682098f413094f494bccf76a567c23908c5035ddbbc
+To reproduce:
+  npm pack tweetnacl@1.0.3 && tar -xzf tweetnacl-1.0.3.tgz
+  shasum -a 256 package/nacl.min.js
+This file provides Ed25519 sign/verify and SHA-512. Functions exercised:
+  - `nacl.sign.keyPair.fromSeed`, `nacl.sign.detached`,
+    `nacl.sign.detached.verify` — for signing.
+  - `nacl.hash` — SHA-512, used as the inner primitive for our pure-JS
+    HMAC-SHA512 / PBKDF2-HMAC-SHA512 (see "PURE-JS CRYPTO" block below),
+    and as the SSHSIG message hash (`hash_algorithm = "sha512"`).
+    This avoids `crypto.subtle`, which is unavailable on `file://` in some
+    browsers (notably older iOS Safari and old Android WebViews).
+================================================================================
+-->
+<script>
+!function(i){"use strict";var m=function(r,n){this.hi=0|r,this.lo=0|n},v=function(r){var n,e=new Float64Array(16);if(r)for(n=0;n<r.length;n++)e[n]=r[n];return e},a=function(){throw new Error("no PRNG")},o=new Uint8Array(16),e=new Uint8Array(32);e[0]=9;var c=v(),w=v([1]),g=v([56129,1]),y=v([30883,4953,19914,30187,55467,16705,2637,112,59544,30585,16505,36039,65139,11119,27886,20995]),l=v([61785,9906,39828,60374,45398,33411,5274,224,53552,61171,33010,6542,64743,22239,55772,9222]),t=v([54554,36645,11616,51542,42930,38181,51040,26924,56412,64982,57905,49316,21502,52590,14035,8553]),f=v([26200,26214,26214,26214,26214,26214,26214,26214,26214,26214,26214,26214,26214,26214,26214,26214]),s=v([41136,18958,6951,50414,58488,44335,6150,12099,55207,15867,153,11085,57099,20417,9344,11139]);function h(r,n){return r<<n|r>>>32-n}function b(r,n){var e=255&r[n+3];return(e=(e=e<<8|255&r[n+2])<<8|255&r[n+1])<<8|255&r[n+0]}function B(r,n){var e=r[n]<<24|r[n+1]<<16|r[n+2]<<8|r[n+3],t=r[n+4]<<24|r[n+5]<<16|r[n+6]<<8|r[n+7];return new m(e,t)}function p(r,n,e){var t;for(t=0;t<4;t++)r[n+t]=255&e,e>>>=8}function S(r,n,e){r[n]=e.hi>>24&255,r[n+1]=e.hi>>16&255,r[n+2]=e.hi>>8&255,r[n+3]=255&e.hi,r[n+4]=e.lo>>24&255,r[n+5]=e.lo>>16&255,r[n+6]=e.lo>>8&255,r[n+7]=255&e.lo}function u(r,n,e,t,o){var i,a=0;for(i=0;i<o;i++)a|=r[n+i]^e[t+i];return(1&a-1>>>8)-1}function A(r,n,e,t){return u(r,n,e,t,16)}function _(r,n,e,t){return u(r,n,e,t,32)}function U(r,n,e,t,o){var i,a,f,u=new Uint32Array(16),c=new Uint32Array(16),w=new Uint32Array(16),y=new Uint32Array(4);for(i=0;i<4;i++)c[5*i]=b(t,4*i),c[1+i]=b(e,4*i),c[6+i]=b(n,4*i),c[11+i]=b(e,16+4*i);for(i=0;i<16;i++)w[i]=c[i];for(i=0;i<20;i++){for(a=0;a<4;a++){for(f=0;f<4;f++)y[f]=c[(5*a+4*f)%16];for(y[1]^=h(y[0]+y[3]|0,7),y[2]^=h(y[1]+y[0]|0,9),y[3]^=h(y[2]+y[1]|0,13),y[0]^=h(y[3]+y[2]|0,18),f=0;f<4;f++)u[4*a+(a+f)%4]=y[f]}for(f=0;f<16;f++)c[f]=u[f]}if(o){for(i=0;i<16;i++)c[i]=c[i]+w[i]|0;for(i=0;i<4;i++)c[5*i]=c[5*i]-b(t,4*i)|0,c[6+i]=c[6+i]-b(n,4*i)|0;for(i=0;i<4;i++)p(r,4*i,c[5*i]),p(r,16+4*i,c[6+i])}else for(i=0;i<16;i++)p(r,4*i,c[i]+w[i]|0)}function E(r,n,e,t){U(r,n,e,t,!1)}function x(r,n,e,t){return U(r,n,e,t,!0),0}var d=new Uint8Array([101,120,112,97,110,100,32,51,50,45,98,121,116,101,32,107]);function K(r,n,e,t,o,i,a){var f,u,c=new Uint8Array(16),w=new Uint8Array(64);if(!o)return 0;for(u=0;u<16;u++)c[u]=0;for(u=0;u<8;u++)c[u]=i[u];for(;64<=o;){for(E(w,c,a,d),u=0;u<64;u++)r[n+u]=(e?e[t+u]:0)^w[u];for(f=1,u=8;u<16;u++)f=f+(255&c[u])|0,c[u]=255&f,f>>>=8;o-=64,n+=64,e&&(t+=64)}if(0<o)for(E(w,c,a,d),u=0;u<o;u++)r[n+u]=(e?e[t+u]:0)^w[u];return 0}function Y(r,n,e,t,o){return K(r,n,null,0,e,t,o)}function L(r,n,e,t,o){var i=new Uint8Array(32);return x(i,t,o,d),Y(r,n,e,t.subarray(16),i)}function T(r,n,e,t,o,i,a){var f=new Uint8Array(32);return x(f,i,a,d),K(r,n,e,t,o,i.subarray(16),f)}function k(r,n){var e,t=0;for(e=0;e<17;e++)t=t+(r[e]+n[e]|0)|0,r[e]=255&t,t>>>=8}var z=new Uint32Array([5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,252]);function R(r,n,e,t,o,i){var a,f,u,c,w=new Uint32Array(17),y=new Uint32Array(17),l=new Uint32Array(17),s=new Uint32Array(17),h=new Uint32Array(17);for(u=0;u<17;u++)y[u]=l[u]=0;for(u=0;u<16;u++)y[u]=i[u];for(y[3]&=15,y[4]&=252,y[7]&=15,y[8]&=252,y[11]&=15,y[12]&=252,y[15]&=15;0<o;){for(u=0;u<17;u++)s[u]=0;for(u=0;u<16&&u<o;++u)s[u]=e[t+u];for(s[u]=1,t+=u,o-=u,k(l,s),f=0;f<17;f++)for(u=w[f]=0;u<17;u++)w[f]=w[f]+l[u]*(u<=f?y[f-u]:320*y[f+17-u]|0)|0;for(f=0;f<17;f++)l[f]=w[f];for(u=c=0;u<16;u++)c=c+l[u]|0,l[u]=255&c,c>>>=8;for(c=c+l[16]|0,l[16]=3&c,c=5*(c>>>2)|0,u=0;u<16;u++)c=c+l[u]|0,l[u]=255&c,c>>>=8;c=c+l[16]|0,l[16]=c}for(u=0;u<17;u++)h[u]=l[u];for(k(l,z),a=0|-(l[16]>>>7),u=0;u<17;u++)l[u]^=a&(h[u]^l[u]);for(u=0;u<16;u++)s[u]=i[u+16];for(s[16]=0,k(l,s),u=0;u<16;u++)r[n+u]=l[u];return 0}function P(r,n,e,t,o,i){var a=new Uint8Array(16);return R(a,0,e,t,o,i),A(r,n,a,0)}function M(r,n,e,t,o){var i;if(e<32)return-1;for(T(r,0,n,0,e,t,o),R(r,16,r,32,e-32,r),i=0;i<16;i++)r[i]=0;return 0}function N(r,n,e,t,o){var i,a=new Uint8Array(32);if(e<32)return-1;if(L(a,0,32,t,o),0!==P(n,16,n,32,e-32,a))return-1;for(T(r,0,n,0,e,t,o),i=0;i<32;i++)r[i]=0;return 0}function O(r,n){var e;for(e=0;e<16;e++)r[e]=0|n[e]}function C(r){var n,e;for(e=0;e<16;e++)r[e]+=65536,n=Math.floor(r[e]/65536),r[(e+1)*(e<15?1:0)]+=n-1+37*(n-1)*(15===e?1:0),r[e]-=65536*n}function F(r,n,e){for(var t,o=~(e-1),i=0;i<16;i++)t=o&(r[i]^n[i]),r[i]^=t,n[i]^=t}function Z(r,n){var e,t,o,i=v(),a=v();for(e=0;e<16;e++)a[e]=n[e];for(C(a),C(a),C(a),t=0;t<2;t++){for(i[0]=a[0]-65517,e=1;e<15;e++)i[e]=a[e]-65535-(i[e-1]>>16&1),i[e-1]&=65535;i[15]=a[15]-32767-(i[14]>>16&1),o=i[15]>>16&1,i[14]&=65535,F(a,i,1-o)}for(e=0;e<16;e++)r[2*e]=255&a[e],r[2*e+1]=a[e]>>8}function G(r,n){var e=new Uint8Array(32),t=new Uint8Array(32);return Z(e,r),Z(t,n),_(e,0,t,0)}function q(r){var n=new Uint8Array(32);return Z(n,r),1&n[0]}function D(r,n){var e;for(e=0;e<16;e++)r[e]=n[2*e]+(n[2*e+1]<<8);r[15]&=32767}function I(r,n,e){var t;for(t=0;t<16;t++)r[t]=n[t]+e[t]|0}function V(r,n,e){var t;for(t=0;t<16;t++)r[t]=n[t]-e[t]|0}function X(r,n,e){var t,o,i=new Float64Array(31);for(t=0;t<31;t++)i[t]=0;for(t=0;t<16;t++)for(o=0;o<16;o++)i[t+o]+=n[t]*e[o];for(t=0;t<15;t++)i[t]+=38*i[t+16];for(t=0;t<16;t++)r[t]=i[t];C(r),C(r)}function j(r,n){X(r,n,n)}function H(r,n){var e,t=v();for(e=0;e<16;e++)t[e]=n[e];for(e=253;0<=e;e--)j(t,t),2!==e&&4!==e&&X(t,t,n);for(e=0;e<16;e++)r[e]=t[e]}function J(r,n){var e,t=v();for(e=0;e<16;e++)t[e]=n[e];for(e=250;0<=e;e--)j(t,t),1!==e&&X(t,t,n);for(e=0;e<16;e++)r[e]=t[e]}function Q(r,n,e){var t,o,i=new Uint8Array(32),a=new Float64Array(80),f=v(),u=v(),c=v(),w=v(),y=v(),l=v();for(o=0;o<31;o++)i[o]=n[o];for(i[31]=127&n[31]|64,i[0]&=248,D(a,e),o=0;o<16;o++)u[o]=a[o],w[o]=f[o]=c[o]=0;for(f[0]=w[0]=1,o=254;0<=o;--o)F(f,u,t=i[o>>>3]>>>(7&o)&1),F(c,w,t),I(y,f,c),V(f,f,c),I(c,u,w),V(u,u,w),j(w,y),j(l,f),X(f,c,f),X(c,u,y),I(y,f,c),V(f,f,c),j(u,f),V(c,w,l),X(f,c,g),I(f,f,w),X(c,c,f),X(f,w,l),X(w,u,a),j(u,y),F(f,u,t),F(c,w,t);for(o=0;o<16;o++)a[o+16]=f[o],a[o+32]=c[o],a[o+48]=u[o],a[o+64]=w[o];var s=a.subarray(32),h=a.subarray(16);return H(s,s),X(h,h,s),Z(r,h),0}function W(r,n){return Q(r,n,e)}function $(r,n){return a(n,32),W(r,n)}function rr(r,n,e){var t=new Uint8Array(32);return Q(t,e,n),x(r,o,t,d)}var nr=M,er=N;function tr(){var r,n,e,t=0,o=0,i=0,a=0,f=65535;for(e=0;e<arguments.length;e++)t+=(r=arguments[e].lo)&f,o+=r>>>16,i+=(n=arguments[e].hi)&f,a+=n>>>16;return new m((i+=(o+=t>>>16)>>>16)&f|(a+=i>>>16)<<16,t&f|o<<16)}function or(r,n){return new m(r.hi>>>n,r.lo>>>n|r.hi<<32-n)}function ir(){var r,n=0,e=0;for(r=0;r<arguments.length;r++)n^=arguments[r].lo,e^=arguments[r].hi;return new m(e,n)}function ar(r,n){var e,t,o=32-n;return n<32?(e=r.hi>>>n|r.lo<<o,t=r.lo>>>n|r.hi<<o):n<64&&(e=r.lo>>>n|r.hi<<o,t=r.hi>>>n|r.lo<<o),new m(e,t)}var fr=[new m(1116352408,3609767458),new m(1899447441,602891725),new m(3049323471,3964484399),new m(3921009573,2173295548),new m(961987163,4081628472),new m(1508970993,3053834265),new m(2453635748,2937671579),new m(2870763221,3664609560),new m(3624381080,2734883394),new m(310598401,1164996542),new m(607225278,1323610764),new m(1426881987,3590304994),new m(1925078388,4068182383),new m(2162078206,991336113),new m(2614888103,633803317),new m(3248222580,3479774868),new m(3835390401,2666613458),new m(4022224774,944711139),new m(264347078,2341262773),new m(604807628,2007800933),new m(770255983,1495990901),new m(1249150122,1856431235),new m(1555081692,3175218132),new m(1996064986,2198950837),new m(2554220882,3999719339),new m(2821834349,766784016),new m(2952996808,2566594879),new m(3210313671,3203337956),new m(3336571891,1034457026),new m(3584528711,2466948901),new m(113926993,3758326383),new m(338241895,168717936),new m(666307205,1188179964),new m(773529912,1546045734),new m(1294757372,1522805485),new m(1396182291,2643833823),new m(1695183700,2343527390),new m(1986661051,1014477480),new m(2177026350,1206759142),new m(2456956037,344077627),new m(2730485921,1290863460),new m(2820302411,3158454273),new m(3259730800,3505952657),new m(3345764771,106217008),new m(3516065817,3606008344),new m(3600352804,1432725776),new m(4094571909,1467031594),new m(275423344,851169720),new m(430227734,3100823752),new m(506948616,1363258195),new m(659060556,3750685593),new m(883997877,3785050280),new m(958139571,3318307427),new m(1322822218,3812723403),new m(1537002063,2003034995),new m(1747873779,3602036899),new m(1955562222,1575990012),new m(2024104815,1125592928),new m(2227730452,2716904306),new m(2361852424,442776044),new m(2428436474,593698344),new m(2756734187,3733110249),new m(3204031479,2999351573),new m(3329325298,3815920427),new m(3391569614,3928383900),new m(3515267271,566280711),new m(3940187606,3454069534),new m(4118630271,4000239992),new m(116418474,1914138554),new m(174292421,2731055270),new m(289380356,3203993006),new m(460393269,320620315),new m(685471733,587496836),new m(852142971,1086792851),new m(1017036298,365543100),new m(1126000580,2618297676),new m(1288033470,3409855158),new m(1501505948,4234509866),new m(1607167915,987167468),new m(1816402316,1246189591)];function ur(r,n,e){var t,o,i,a=[],f=[],u=[],c=[];for(o=0;o<8;o++)a[o]=u[o]=B(r,8*o);for(var w,y,l,s,h,v,g,b,p,A,_,U,E,x,d=0;128<=e;){for(o=0;o<16;o++)c[o]=B(n,8*o+d);for(o=0;o<80;o++){for(i=0;i<8;i++)f[i]=u[i];for(t=tr(u[7],ir(ar(x=u[4],14),ar(x,18),ar(x,41)),(p=u[4],A=u[5],_=u[6],0,U=p.hi&A.hi^~p.hi&_.hi,E=p.lo&A.lo^~p.lo&_.lo,new m(U,E)),fr[o],c[o%16]),f[7]=tr(t,ir(ar(b=u[0],28),ar(b,34),ar(b,39)),(l=u[0],s=u[1],h=u[2],0,v=l.hi&s.hi^l.hi&h.hi^s.hi&h.hi,g=l.lo&s.lo^l.lo&h.lo^s.lo&h.lo,new m(v,g))),f[3]=tr(f[3],t),i=0;i<8;i++)u[(i+1)%8]=f[i];if(o%16==15)for(i=0;i<16;i++)c[i]=tr(c[i],c[(i+9)%16],ir(ar(y=c[(i+1)%16],1),ar(y,8),or(y,7)),ir(ar(w=c[(i+14)%16],19),ar(w,61),or(w,6)))}for(o=0;o<8;o++)u[o]=tr(u[o],a[o]),a[o]=u[o];d+=128,e-=128}for(o=0;o<8;o++)S(r,8*o,a[o]);return e}var cr=new Uint8Array([106,9,230,103,243,188,201,8,187,103,174,133,132,202,167,59,60,110,243,114,254,148,248,43,165,79,245,58,95,29,54,241,81,14,82,127,173,230,130,209,155,5,104,140,43,62,108,31,31,131,217,171,251,65,189,107,91,224,205,25,19,126,33,121]);function wr(r,n,e){var t,o=new Uint8Array(64),i=new Uint8Array(256),a=e;for(t=0;t<64;t++)o[t]=cr[t];for(ur(o,n,e),e%=128,t=0;t<256;t++)i[t]=0;for(t=0;t<e;t++)i[t]=n[a-e+t];for(i[e]=128,i[(e=256-128*(e<112?1:0))-9]=0,S(i,e-8,new m(a/536870912|0,a<<3)),ur(o,i,e),t=0;t<64;t++)r[t]=o[t];return 0}function yr(r,n){var e=v(),t=v(),o=v(),i=v(),a=v(),f=v(),u=v(),c=v(),w=v();V(e,r[1],r[0]),V(w,n[1],n[0]),X(e,e,w),I(t,r[0],r[1]),I(w,n[0],n[1]),X(t,t,w),X(o,r[3],n[3]),X(o,o,l),X(i,r[2],n[2]),I(i,i,i),V(a,t,e),V(f,i,o),I(u,i,o),I(c,t,e),X(r[0],a,f),X(r[1],c,u),X(r[2],u,f),X(r[3],a,c)}function lr(r,n,e){var t;for(t=0;t<4;t++)F(r[t],n[t],e)}function sr(r,n){var e=v(),t=v(),o=v();H(o,n[2]),X(e,n[0],o),X(t,n[1],o),Z(r,t),r[31]^=q(e)<<7}function hr(r,n,e){var t,o;for(O(r[0],c),O(r[1],w),O(r[2],w),O(r[3],c),o=255;0<=o;--o)lr(r,n,t=e[o/8|0]>>(7&o)&1),yr(n,r),yr(r,r),lr(r,n,t)}function vr(r,n){var e=[v(),v(),v(),v()];O(e[0],t),O(e[1],f),O(e[2],w),X(e[3],t,f),hr(r,e,n)}function gr(r,n,e){var t,o=new Uint8Array(64),i=[v(),v(),v(),v()];for(e||a(n,32),wr(o,n,32),o[0]&=248,o[31]&=127,o[31]|=64,vr(i,o),sr(r,i),t=0;t<32;t++)n[t+32]=r[t];return 0}var br=new Float64Array([237,211,245,92,26,99,18,88,214,156,247,162,222,249,222,20,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,16]);function pr(r,n){var e,t,o,i;for(t=63;32<=t;--t){for(e=0,o=t-32,i=t-12;o<i;++o)n[o]+=e-16*n[t]*br[o-(t-32)],e=Math.floor((n[o]+128)/256),n[o]-=256*e;n[o]+=e,n[t]=0}for(o=e=0;o<32;o++)n[o]+=e-(n[31]>>4)*br[o],e=n[o]>>8,n[o]&=255;for(o=0;o<32;o++)n[o]-=e*br[o];for(t=0;t<32;t++)n[t+1]+=n[t]>>8,r[t]=255&n[t]}function Ar(r){var n,e=new Float64Array(64);for(n=0;n<64;n++)e[n]=r[n];for(n=0;n<64;n++)r[n]=0;pr(r,e)}function _r(r,n,e,t){var o,i,a=new Uint8Array(64),f=new Uint8Array(64),u=new Uint8Array(64),c=new Float64Array(64),w=[v(),v(),v(),v()];wr(a,t,32),a[0]&=248,a[31]&=127,a[31]|=64;var y=e+64;for(o=0;o<e;o++)r[64+o]=n[o];for(o=0;o<32;o++)r[32+o]=a[32+o];for(wr(u,r.subarray(32),e+32),Ar(u),vr(w,u),sr(r,w),o=32;o<64;o++)r[o]=t[o];for(wr(f,r,e+64),Ar(f),o=0;o<64;o++)c[o]=0;for(o=0;o<32;o++)c[o]=u[o];for(o=0;o<32;o++)for(i=0;i<32;i++)c[o+i]+=f[o]*a[i];return pr(r.subarray(32),c),y}function Ur(r,n,e,t){var o,i=new Uint8Array(32),a=new Uint8Array(64),f=[v(),v(),v(),v()],u=[v(),v(),v(),v()];if(e<64)return-1;if(function(r,n){var e=v(),t=v(),o=v(),i=v(),a=v(),f=v(),u=v();if(O(r[2],w),D(r[1],n),j(o,r[1]),X(i,o,y),V(o,o,r[2]),I(i,r[2],i),j(a,i),j(f,a),X(u,f,a),X(e,u,o),X(e,e,i),J(e,e),X(e,e,o),X(e,e,i),X(e,e,i),X(r[0],e,i),j(t,r[0]),X(t,t,i),G(t,o)&&X(r[0],r[0],s),j(t,r[0]),X(t,t,i),G(t,o))return 1;q(r[0])===n[31]>>7&&V(r[0],c,r[0]),X(r[3],r[0],r[1])}(u,t))return-1;for(o=0;o<e;o++)r[o]=n[o];for(o=0;o<32;o++)r[o+32]=t[o];if(wr(a,r,e),Ar(a),hr(f,u,a),vr(u,n.subarray(32)),yr(f,u),sr(i,f),e-=64,_(n,0,i,0)){for(o=0;o<e;o++)r[o]=0;return-1}for(o=0;o<e;o++)r[o]=n[o+64];return e}function Er(r,n){if(32!==r.length)throw new Error("bad key size");if(24!==n.length)throw new Error("bad nonce size")}function xr(){for(var r=0;r<arguments.length;r++)if(!(arguments[r]instanceof Uint8Array))throw new TypeError("unexpected type, use Uint8Array")}function dr(r){for(var n=0;n<r.length;n++)r[n]=0}i.lowlevel={crypto_core_hsalsa20:x,crypto_stream_xor:T,crypto_stream:L,crypto_stream_salsa20_xor:K,crypto_stream_salsa20:Y,crypto_onetimeauth:R,crypto_onetimeauth_verify:P,crypto_verify_16:A,crypto_verify_32:_,crypto_secretbox:M,crypto_secretbox_open:N,crypto_scalarmult:Q,crypto_scalarmult_base:W,crypto_box_beforenm:rr,crypto_box_afternm:nr,crypto_box:function(r,n,e,t,o,i){var a=new Uint8Array(32);return rr(a,o,i),nr(r,n,e,t,a)},crypto_box_open:function(r,n,e,t,o,i){var a=new Uint8Array(32);return rr(a,o,i),er(r,n,e,t,a)},crypto_box_keypair:$,crypto_hash:wr,crypto_sign:_r,crypto_sign_keypair:gr,crypto_sign_open:Ur,crypto_secretbox_KEYBYTES:32,crypto_secretbox_NONCEBYTES:24,crypto_secretbox_ZEROBYTES:32,crypto_secretbox_BOXZEROBYTES:16,crypto_scalarmult_BYTES:32,crypto_scalarmult_SCALARBYTES:32,crypto_box_PUBLICKEYBYTES:32,crypto_box_SECRETKEYBYTES:32,crypto_box_BEFORENMBYTES:32,crypto_box_NONCEBYTES:24,crypto_box_ZEROBYTES:32,crypto_box_BOXZEROBYTES:16,crypto_sign_BYTES:64,crypto_sign_PUBLICKEYBYTES:32,crypto_sign_SECRETKEYBYTES:64,crypto_sign_SEEDBYTES:32,crypto_hash_BYTES:64,gf:v,D:y,L:br,pack25519:Z,unpack25519:D,M:X,A:I,S:j,Z:V,pow2523:J,add:yr,set25519:O,modL:pr,scalarmult:hr,scalarbase:vr},i.randomBytes=function(r){var n=new Uint8Array(r);return a(n,r),n},i.secretbox=function(r,n,e){xr(r,n,e),Er(e,n);for(var t=new Uint8Array(32+r.length),o=new Uint8Array(t.length),i=0;i<r.length;i++)t[i+32]=r[i];return M(o,t,t.length,n,e),o.subarray(16)},i.secretbox.open=function(r,n,e){xr(r,n,e),Er(e,n);for(var t=new Uint8Array(16+r.length),o=new Uint8Array(t.length),i=0;i<r.length;i++)t[i+16]=r[i];return t.length<32||0!==N(o,t,t.length,n,e)?null:o.subarray(32)},i.secretbox.keyLength=32,i.secretbox.nonceLength=24,i.secretbox.overheadLength=16,i.scalarMult=function(r,n){if(xr(r,n),32!==r.length)throw new Error("bad n size");if(32!==n.length)throw new Error("bad p size");var e=new Uint8Array(32);return Q(e,r,n),e},i.scalarMult.base=function(r){if(xr(r),32!==r.length)throw new Error("bad n size");var n=new Uint8Array(32);return W(n,r),n},i.scalarMult.scalarLength=32,i.scalarMult.groupElementLength=32,i.box=function(r,n,e,t){var o=i.box.before(e,t);return i.secretbox(r,n,o)},i.box.before=function(r,n){xr(r,n),function(r,n){if(32!==r.length)throw new Error("bad public key size");if(32!==n.length)throw new Error("bad secret key size")}(r,n);var e=new Uint8Array(32);return rr(e,r,n),e},i.box.after=i.secretbox,i.box.open=function(r,n,e,t){var o=i.box.before(e,t);return i.secretbox.open(r,n,o)},i.box.open.after=i.secretbox.open,i.box.keyPair=function(){var r=new Uint8Array(32),n=new Uint8Array(32);return $(r,n),{publicKey:r,secretKey:n}},i.box.keyPair.fromSecretKey=function(r){if(xr(r),32!==r.length)throw new Error("bad secret key size");var n=new Uint8Array(32);return W(n,r),{publicKey:n,secretKey:new Uint8Array(r)}},i.box.publicKeyLength=32,i.box.secretKeyLength=32,i.box.sharedKeyLength=32,i.box.nonceLength=24,i.box.overheadLength=i.secretbox.overheadLength,i.sign=function(r,n){if(xr(r,n),64!==n.length)throw new Error("bad secret key size");var e=new Uint8Array(64+r.length);return _r(e,r,r.length,n),e},i.sign.open=function(r,n){if(xr(r,n),32!==n.length)throw new Error("bad public key size");var e=new Uint8Array(r.length),t=Ur(e,r,r.length,n);if(t<0)return null;for(var o=new Uint8Array(t),i=0;i<o.length;i++)o[i]=e[i];return o},i.sign.detached=function(r,n){for(var e=i.sign(r,n),t=new Uint8Array(64),o=0;o<t.length;o++)t[o]=e[o];return t},i.sign.detached.verify=function(r,n,e){if(xr(r,n,e),64!==n.length)throw new Error("bad signature size");if(32!==e.length)throw new Error("bad public key size");var t,o=new Uint8Array(64+r.length),i=new Uint8Array(64+r.length);for(t=0;t<64;t++)o[t]=n[t];for(t=0;t<r.length;t++)o[t+64]=r[t];return 0<=Ur(i,o,o.length,e)},i.sign.keyPair=function(){var r=new Uint8Array(32),n=new Uint8Array(64);return gr(r,n),{publicKey:r,secretKey:n}},i.sign.keyPair.fromSecretKey=function(r){if(xr(r),64!==r.length)throw new Error("bad secret key size");for(var n=new Uint8Array(32),e=0;e<n.length;e++)n[e]=r[32+e];return{publicKey:n,secretKey:new Uint8Array(r)}},i.sign.keyPair.fromSeed=function(r){if(xr(r),32!==r.length)throw new Error("bad seed size");for(var n=new Uint8Array(32),e=new Uint8Array(64),t=0;t<32;t++)e[t]=r[t];return gr(n,e,!0),{publicKey:n,secretKey:e}},i.sign.publicKeyLength=32,i.sign.secretKeyLength=64,i.sign.seedLength=32,i.sign.signatureLength=64,i.hash=function(r){xr(r);var n=new Uint8Array(64);return wr(n,r,r.length),n},i.hash.hashLength=64,i.verify=function(r,n){return xr(r,n),0!==r.length&&0!==n.length&&(r.length===n.length&&0===u(r,0,n,0,r.length))},i.setPRNG=function(r){a=r},function(){var o="undefined"!=typeof self?self.crypto||self.msCrypto:null;if(o&&o.getRandomValues){i.setPRNG(function(r,n){var e,t=new Uint8Array(n);for(e=0;e<n;e+=65536)o.getRandomValues(t.subarray(e,e+Math.min(n-e,65536)));for(e=0;e<n;e++)r[e]=t[e];dr(t)})}else"undefined"!=typeof require&&(o=require("crypto"))&&o.randomBytes&&i.setPRNG(function(r,n){var e,t=o.randomBytes(n);for(e=0;e<n;e++)r[e]=t[e];dr(t)})}()}("undefined"!=typeof module&&module.exports?module.exports:self.nacl=self.nacl||{});
+</script>
+
+<!--
+================================================================================
+LIBRARY: qrcode-generator  v2.0.4  by Kazuhiko Arase  (MIT)
+Source: https://www.npmjs.com/package/qrcode-generator  (file: dist/qrcode.js)
+Pure JS, no canvas dependency, ~57 KB unminified. We use makeImage() output via
+createDataURL() which produces a data: URI for an <img>. The original CommonJS
+export wrapper has been replaced with `window.qrcode = qrcode;` so the global
+is available under file:// without a module loader.
+
+Hashes for audit:
+  upstream  qrcode-generator@2.0.4 dist/qrcode.js (UMD wrapper):
+    79ec86f82856005b1c887905cfccfcfbec3821ca61c7fd5a952faa5f778f791c
+  inlined   block below (UMD wrapper replaced by `window.qrcode = qrcode;`):
+    0b999be752ed70d3dff7a4156ec0123b31002899ac1de79cfdf624d28b940257
+
+To reproduce the upstream hash:
+  npm pack qrcode-generator@2.0.4 && tar -xzf qrcode-generator-2.0.4.tgz
+  shasum -a 256 package/dist/qrcode.js
+The inlined hash is the SHA-256 of the entire <script>...</script> body
+that follows (including the leading newline and the trailing
+`window.qrcode = qrcode;\n`).
+================================================================================
+-->
+<script>
+//---------------------------------------------------------------------
+//
+// QR Code Generator for JavaScript
+//
+// Copyright (c) 2009 Kazuhiko Arase
+//
+// URL: http://www.d-project.com/
+//
+// Licensed under the MIT license:
+//  http://www.opensource.org/licenses/mit-license.php
+//
+// The word 'QR Code' is registered trademark of
+// DENSO WAVE INCORPORATED
+//  http://www.denso-wave.com/qrcode/faqpatent-e.html
+//
+//---------------------------------------------------------------------
+
+var qrcode = function() {
+
+  //---------------------------------------------------------------------
+  // qrcode
+  //---------------------------------------------------------------------
+
+  /**
+   * qrcode
+   * @param typeNumber 1 to 40
+   * @param errorCorrectionLevel 'L','M','Q','H'
+   */
+  var qrcode = function(typeNumber, errorCorrectionLevel) {
+
+    var PAD0 = 0xEC;
+    var PAD1 = 0x11;
+
+    var _typeNumber = typeNumber;
+    var _errorCorrectionLevel = QRErrorCorrectionLevel[errorCorrectionLevel];
+    var _modules = null;
+    var _moduleCount = 0;
+    var _dataCache = null;
+    var _dataList = [];
+
+    var _this = {};
+
+    var makeImpl = function(test, maskPattern) {
+
+      _moduleCount = _typeNumber * 4 + 17;
+      _modules = function(moduleCount) {
+        var modules = new Array(moduleCount);
+        for (var row = 0; row < moduleCount; row += 1) {
+          modules[row] = new Array(moduleCount);
+          for (var col = 0; col < moduleCount; col += 1) {
+            modules[row][col] = null;
+          }
+        }
+        return modules;
+      }(_moduleCount);
+
+      setupPositionProbePattern(0, 0);
+      setupPositionProbePattern(_moduleCount - 7, 0);
+      setupPositionProbePattern(0, _moduleCount - 7);
+      setupPositionAdjustPattern();
+      setupTimingPattern();
+      setupTypeInfo(test, maskPattern);
+
+      if (_typeNumber >= 7) {
+        setupTypeNumber(test);
+      }
+
+      if (_dataCache == null) {
+        _dataCache = createData(_typeNumber, _errorCorrectionLevel, _dataList);
+      }
+
+      mapData(_dataCache, maskPattern);
+    };
+
+    var setupPositionProbePattern = function(row, col) {
+
+      for (var r = -1; r <= 7; r += 1) {
+
+        if (row + r <= -1 || _moduleCount <= row + r) continue;
+
+        for (var c = -1; c <= 7; c += 1) {
+
+          if (col + c <= -1 || _moduleCount <= col + c) continue;
+
+          if ( (0 <= r && r <= 6 && (c == 0 || c == 6) )
+              || (0 <= c && c <= 6 && (r == 0 || r == 6) )
+              || (2 <= r && r <= 4 && 2 <= c && c <= 4) ) {
+            _modules[row + r][col + c] = true;
+          } else {
+            _modules[row + r][col + c] = false;
+          }
+        }
+      }
+    };
+
+    var getBestMaskPattern = function() {
+
+      var minLostPoint = 0;
+      var pattern = 0;
+
+      for (var i = 0; i < 8; i += 1) {
+
+        makeImpl(true, i);
+
+        var lostPoint = QRUtil.getLostPoint(_this);
+
+        if (i == 0 || minLostPoint > lostPoint) {
+          minLostPoint = lostPoint;
+          pattern = i;
+        }
+      }
+
+      return pattern;
+    };
+
+    var setupTimingPattern = function() {
+
+      for (var r = 8; r < _moduleCount - 8; r += 1) {
+        if (_modules[r][6] != null) {
+          continue;
+        }
+        _modules[r][6] = (r % 2 == 0);
+      }
+
+      for (var c = 8; c < _moduleCount - 8; c += 1) {
+        if (_modules[6][c] != null) {
+          continue;
+        }
+        _modules[6][c] = (c % 2 == 0);
+      }
+    };
+
+    var setupPositionAdjustPattern = function() {
+
+      var pos = QRUtil.getPatternPosition(_typeNumber);
+
+      for (var i = 0; i < pos.length; i += 1) {
+
+        for (var j = 0; j < pos.length; j += 1) {
+
+          var row = pos[i];
+          var col = pos[j];
+
+          if (_modules[row][col] != null) {
+            continue;
+          }
+
+          for (var r = -2; r <= 2; r += 1) {
+
+            for (var c = -2; c <= 2; c += 1) {
+
+              if (r == -2 || r == 2 || c == -2 || c == 2
+                  || (r == 0 && c == 0) ) {
+                _modules[row + r][col + c] = true;
+              } else {
+                _modules[row + r][col + c] = false;
+              }
+            }
+          }
+        }
+      }
+    };
+
+    var setupTypeNumber = function(test) {
+
+      var bits = QRUtil.getBCHTypeNumber(_typeNumber);
+
+      for (var i = 0; i < 18; i += 1) {
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+        _modules[Math.floor(i / 3)][i % 3 + _moduleCount - 8 - 3] = mod;
+      }
+
+      for (var i = 0; i < 18; i += 1) {
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+        _modules[i % 3 + _moduleCount - 8 - 3][Math.floor(i / 3)] = mod;
+      }
+    };
+
+    var setupTypeInfo = function(test, maskPattern) {
+
+      var data = (_errorCorrectionLevel << 3) | maskPattern;
+      var bits = QRUtil.getBCHTypeInfo(data);
+
+      // vertical
+      for (var i = 0; i < 15; i += 1) {
+
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+
+        if (i < 6) {
+          _modules[i][8] = mod;
+        } else if (i < 8) {
+          _modules[i + 1][8] = mod;
+        } else {
+          _modules[_moduleCount - 15 + i][8] = mod;
+        }
+      }
+
+      // horizontal
+      for (var i = 0; i < 15; i += 1) {
+
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+
+        if (i < 8) {
+          _modules[8][_moduleCount - i - 1] = mod;
+        } else if (i < 9) {
+          _modules[8][15 - i - 1 + 1] = mod;
+        } else {
+          _modules[8][15 - i - 1] = mod;
+        }
+      }
+
+      // fixed module
+      _modules[_moduleCount - 8][8] = (!test);
+    };
+
+    var mapData = function(data, maskPattern) {
+
+      var inc = -1;
+      var row = _moduleCount - 1;
+      var bitIndex = 7;
+      var byteIndex = 0;
+      var maskFunc = QRUtil.getMaskFunction(maskPattern);
+
+      for (var col = _moduleCount - 1; col > 0; col -= 2) {
+
+        if (col == 6) col -= 1;
+
+        while (true) {
+
+          for (var c = 0; c < 2; c += 1) {
+
+            if (_modules[row][col - c] == null) {
+
+              var dark = false;
+
+              if (byteIndex < data.length) {
+                dark = ( ( (data[byteIndex] >>> bitIndex) & 1) == 1);
+              }
+
+              var mask = maskFunc(row, col - c);
+
+              if (mask) {
+                dark = !dark;
+              }
+
+              _modules[row][col - c] = dark;
+              bitIndex -= 1;
+
+              if (bitIndex == -1) {
+                byteIndex += 1;
+                bitIndex = 7;
+              }
+            }
+          }
+
+          row += inc;
+
+          if (row < 0 || _moduleCount <= row) {
+            row -= inc;
+            inc = -inc;
+            break;
+          }
+        }
+      }
+    };
+
+    var createBytes = function(buffer, rsBlocks) {
+
+      var offset = 0;
+
+      var maxDcCount = 0;
+      var maxEcCount = 0;
+
+      var dcdata = new Array(rsBlocks.length);
+      var ecdata = new Array(rsBlocks.length);
+
+      for (var r = 0; r < rsBlocks.length; r += 1) {
+
+        var dcCount = rsBlocks[r].dataCount;
+        var ecCount = rsBlocks[r].totalCount - dcCount;
+
+        maxDcCount = Math.max(maxDcCount, dcCount);
+        maxEcCount = Math.max(maxEcCount, ecCount);
+
+        dcdata[r] = new Array(dcCount);
+
+        for (var i = 0; i < dcdata[r].length; i += 1) {
+          dcdata[r][i] = 0xff & buffer.getBuffer()[i + offset];
+        }
+        offset += dcCount;
+
+        var rsPoly = QRUtil.getErrorCorrectPolynomial(ecCount);
+        var rawPoly = qrPolynomial(dcdata[r], rsPoly.getLength() - 1);
+
+        var modPoly = rawPoly.mod(rsPoly);
+        ecdata[r] = new Array(rsPoly.getLength() - 1);
+        for (var i = 0; i < ecdata[r].length; i += 1) {
+          var modIndex = i + modPoly.getLength() - ecdata[r].length;
+          ecdata[r][i] = (modIndex >= 0)? modPoly.getAt(modIndex) : 0;
+        }
+      }
+
+      var totalCodeCount = 0;
+      for (var i = 0; i < rsBlocks.length; i += 1) {
+        totalCodeCount += rsBlocks[i].totalCount;
+      }
+
+      var data = new Array(totalCodeCount);
+      var index = 0;
+
+      for (var i = 0; i < maxDcCount; i += 1) {
+        for (var r = 0; r < rsBlocks.length; r += 1) {
+          if (i < dcdata[r].length) {
+            data[index] = dcdata[r][i];
+            index += 1;
+          }
+        }
+      }
+
+      for (var i = 0; i < maxEcCount; i += 1) {
+        for (var r = 0; r < rsBlocks.length; r += 1) {
+          if (i < ecdata[r].length) {
+            data[index] = ecdata[r][i];
+            index += 1;
+          }
+        }
+      }
+
+      return data;
+    };
+
+    var createData = function(typeNumber, errorCorrectionLevel, dataList) {
+
+      var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, errorCorrectionLevel);
+
+      var buffer = qrBitBuffer();
+
+      for (var i = 0; i < dataList.length; i += 1) {
+        var data = dataList[i];
+        buffer.put(data.getMode(), 4);
+        buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber) );
+        data.write(buffer);
+      }
+
+      // calc num max data.
+      var totalDataCount = 0;
+      for (var i = 0; i < rsBlocks.length; i += 1) {
+        totalDataCount += rsBlocks[i].dataCount;
+      }
+
+      if (buffer.getLengthInBits() > totalDataCount * 8) {
+        throw 'code length overflow. ('
+          + buffer.getLengthInBits()
+          + '>'
+          + totalDataCount * 8
+          + ')';
+      }
+
+      // end code
+      if (buffer.getLengthInBits() + 4 <= totalDataCount * 8) {
+        buffer.put(0, 4);
+      }
+
+      // padding
+      while (buffer.getLengthInBits() % 8 != 0) {
+        buffer.putBit(false);
+      }
+
+      // padding
+      while (true) {
+
+        if (buffer.getLengthInBits() >= totalDataCount * 8) {
+          break;
+        }
+        buffer.put(PAD0, 8);
+
+        if (buffer.getLengthInBits() >= totalDataCount * 8) {
+          break;
+        }
+        buffer.put(PAD1, 8);
+      }
+
+      return createBytes(buffer, rsBlocks);
+    };
+
+    _this.addData = function(data, mode) {
+
+      mode = mode || 'Byte';
+
+      var newData = null;
+
+      switch(mode) {
+      case 'Numeric' :
+        newData = qrNumber(data);
+        break;
+      case 'Alphanumeric' :
+        newData = qrAlphaNum(data);
+        break;
+      case 'Byte' :
+        newData = qr8BitByte(data);
+        break;
+      case 'Kanji' :
+        newData = qrKanji(data);
+        break;
+      default :
+        throw 'mode:' + mode;
+      }
+
+      _dataList.push(newData);
+      _dataCache = null;
+    };
+
+    _this.isDark = function(row, col) {
+      if (row < 0 || _moduleCount <= row || col < 0 || _moduleCount <= col) {
+        throw row + ',' + col;
+      }
+      return _modules[row][col];
+    };
+
+    _this.getModuleCount = function() {
+      return _moduleCount;
+    };
+
+    _this.make = function() {
+      if (_typeNumber < 1) {
+        var typeNumber = 1;
+
+        for (; typeNumber < 40; typeNumber++) {
+          var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, _errorCorrectionLevel);
+          var buffer = qrBitBuffer();
+
+          for (var i = 0; i < _dataList.length; i++) {
+            var data = _dataList[i];
+            buffer.put(data.getMode(), 4);
+            buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber) );
+            data.write(buffer);
+          }
+
+          var totalDataCount = 0;
+          for (var i = 0; i < rsBlocks.length; i++) {
+            totalDataCount += rsBlocks[i].dataCount;
+          }
+
+          if (buffer.getLengthInBits() <= totalDataCount * 8) {
+            break;
+          }
+        }
+
+        _typeNumber = typeNumber;
+      }
+
+      makeImpl(false, getBestMaskPattern() );
+    };
+
+    _this.createTableTag = function(cellSize, margin) {
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      var qrHtml = '';
+
+      qrHtml += '<table style="';
+      qrHtml += ' border-width: 0px; border-style: none;';
+      qrHtml += ' border-collapse: collapse;';
+      qrHtml += ' padding: 0px; margin: ' + margin + 'px;';
+      qrHtml += '">';
+      qrHtml += '<tbody>';
+
+      for (var r = 0; r < _this.getModuleCount(); r += 1) {
+
+        qrHtml += '<tr>';
+
+        for (var c = 0; c < _this.getModuleCount(); c += 1) {
+          qrHtml += '<td style="';
+          qrHtml += ' border-width: 0px; border-style: none;';
+          qrHtml += ' border-collapse: collapse;';
+          qrHtml += ' padding: 0px; margin: 0px;';
+          qrHtml += ' width: ' + cellSize + 'px;';
+          qrHtml += ' height: ' + cellSize + 'px;';
+          qrHtml += ' background-color: ';
+          qrHtml += _this.isDark(r, c)? '#000000' : '#ffffff';
+          qrHtml += ';';
+          qrHtml += '"/>';
+        }
+
+        qrHtml += '</tr>';
+      }
+
+      qrHtml += '</tbody>';
+      qrHtml += '</table>';
+
+      return qrHtml;
+    };
+
+    _this.createSvgTag = function(cellSize, margin, alt, title) {
+
+      var opts = {};
+      if (typeof arguments[0] == 'object') {
+        // Called by options.
+        opts = arguments[0];
+        // overwrite cellSize and margin.
+        cellSize = opts.cellSize;
+        margin = opts.margin;
+        alt = opts.alt;
+        title = opts.title;
+      }
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      // Compose alt property surrogate
+      alt = (typeof alt === 'string') ? {text: alt} : alt || {};
+      alt.text = alt.text || null;
+      alt.id = (alt.text) ? alt.id || 'qrcode-description' : null;
+
+      // Compose title property surrogate
+      title = (typeof title === 'string') ? {text: title} : title || {};
+      title.text = title.text || null;
+      title.id = (title.text) ? title.id || 'qrcode-title' : null;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var c, mc, r, mr, qrSvg='', rect;
+
+      rect = 'l' + cellSize + ',0 0,' + cellSize +
+        ' -' + cellSize + ',0 0,-' + cellSize + 'z ';
+
+      qrSvg += '<svg version="1.1" xmlns="http://www.w3.org/2000/svg"';
+      qrSvg += !opts.scalable ? ' width="' + size + 'px" height="' + size + 'px"' : '';
+      qrSvg += ' viewBox="0 0 ' + size + ' ' + size + '" ';
+      qrSvg += ' preserveAspectRatio="xMinYMin meet"';
+      qrSvg += (title.text || alt.text) ? ' role="img" aria-labelledby="' +
+          escapeXml([title.id, alt.id].join(' ').trim() ) + '"' : '';
+      qrSvg += '>';
+      qrSvg += (title.text) ? '<title id="' + escapeXml(title.id) + '">' +
+          escapeXml(title.text) + '</title>' : '';
+      qrSvg += (alt.text) ? '<description id="' + escapeXml(alt.id) + '">' +
+          escapeXml(alt.text) + '</description>' : '';
+      qrSvg += '<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>';
+      qrSvg += '<path d="';
+
+      for (r = 0; r < _this.getModuleCount(); r += 1) {
+        mr = r * cellSize + margin;
+        for (c = 0; c < _this.getModuleCount(); c += 1) {
+          if (_this.isDark(r, c) ) {
+            mc = c*cellSize+margin;
+            qrSvg += 'M' + mc + ',' + mr + rect;
+          }
+        }
+      }
+
+      qrSvg += '" stroke="transparent" fill="black"/>';
+      qrSvg += '</svg>';
+
+      return qrSvg;
+    };
+
+    _this.createDataURL = function(cellSize, margin) {
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var min = margin;
+      var max = size - margin;
+
+      return createDataURL(size, size, function(x, y) {
+        if (min <= x && x < max && min <= y && y < max) {
+          var c = Math.floor( (x - min) / cellSize);
+          var r = Math.floor( (y - min) / cellSize);
+          return _this.isDark(r, c)? 0 : 1;
+        } else {
+          return 1;
+        }
+      } );
+    };
+
+    _this.createImgTag = function(cellSize, margin, alt) {
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+
+      var img = '';
+      img += '<img';
+      img += '\u0020src="';
+      img += _this.createDataURL(cellSize, margin);
+      img += '"';
+      img += '\u0020width="';
+      img += size;
+      img += '"';
+      img += '\u0020height="';
+      img += size;
+      img += '"';
+      if (alt) {
+        img += '\u0020alt="';
+        img += escapeXml(alt);
+        img += '"';
+      }
+      img += '/>';
+
+      return img;
+    };
+
+    var escapeXml = function(s) {
+      var escaped = '';
+      for (var i = 0; i < s.length; i += 1) {
+        var c = s.charAt(i);
+        switch(c) {
+        case '<': escaped += '&lt;'; break;
+        case '>': escaped += '&gt;'; break;
+        case '&': escaped += '&amp;'; break;
+        case '"': escaped += '&quot;'; break;
+        default : escaped += c; break;
+        }
+      }
+      return escaped;
+    };
+
+    var _createHalfASCII = function(margin) {
+      var cellSize = 1;
+      margin = (typeof margin == 'undefined')? cellSize * 2 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var min = margin;
+      var max = size - margin;
+
+      var y, x, r1, r2, p;
+
+      var blocks = {
+        '██': '█',
+        '█ ': '▀',
+        ' █': '▄',
+        '  ': ' '
+      };
+
+      var blocksLastLineNoMargin = {
+        '██': '▀',
+        '█ ': '▀',
+        ' █': ' ',
+        '  ': ' '
+      };
+
+      var ascii = '';
+      for (y = 0; y < size; y += 2) {
+        r1 = Math.floor((y - min) / cellSize);
+        r2 = Math.floor((y + 1 - min) / cellSize);
+        for (x = 0; x < size; x += 1) {
+          p = '█';
+
+          if (min <= x && x < max && min <= y && y < max && _this.isDark(r1, Math.floor((x - min) / cellSize))) {
+            p = ' ';
+          }
+
+          if (min <= x && x < max && min <= y+1 && y+1 < max && _this.isDark(r2, Math.floor((x - min) / cellSize))) {
+            p += ' ';
+          }
+          else {
+            p += '█';
+          }
+
+          // Output 2 characters per pixel, to create full square. 1 character per pixels gives only half width of square.
+          ascii += (margin < 1 && y+1 >= max) ? blocksLastLineNoMargin[p] : blocks[p];
+        }
+
+        ascii += '\n';
+      }
+
+      if (size % 2 && margin > 0) {
+        return ascii.substring(0, ascii.length - size - 1) + Array(size+1).join('▀');
+      }
+
+      return ascii.substring(0, ascii.length-1);
+    };
+
+    _this.createASCII = function(cellSize, margin) {
+      cellSize = cellSize || 1;
+
+      if (cellSize < 2) {
+        return _createHalfASCII(margin);
+      }
+
+      cellSize -= 1;
+      margin = (typeof margin == 'undefined')? cellSize * 2 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var min = margin;
+      var max = size - margin;
+
+      var y, x, r, p;
+
+      var white = Array(cellSize+1).join('██');
+      var black = Array(cellSize+1).join('  ');
+
+      var ascii = '';
+      var line = '';
+      for (y = 0; y < size; y += 1) {
+        r = Math.floor( (y - min) / cellSize);
+        line = '';
+        for (x = 0; x < size; x += 1) {
+          p = 1;
+
+          if (min <= x && x < max && min <= y && y < max && _this.isDark(r, Math.floor((x - min) / cellSize))) {
+            p = 0;
+          }
+
+          // Output 2 characters per pixel, to create full square. 1 character per pixels gives only half width of square.
+          line += p ? white : black;
+        }
+
+        for (r = 0; r < cellSize; r += 1) {
+          ascii += line + '\n';
+        }
+      }
+
+      return ascii.substring(0, ascii.length-1);
+    };
+
+    _this.renderTo2dContext = function(context, cellSize) {
+      cellSize = cellSize || 2;
+      var length = _this.getModuleCount();
+      for (var row = 0; row < length; row++) {
+        for (var col = 0; col < length; col++) {
+          context.fillStyle = _this.isDark(row, col) ? 'black' : 'white';
+          context.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrcode.stringToBytes
+  //---------------------------------------------------------------------
+
+  qrcode.stringToBytesFuncs = {
+    'default' : function(s) {
+      var bytes = [];
+      for (var i = 0; i < s.length; i += 1) {
+        var c = s.charCodeAt(i);
+        bytes.push(c & 0xff);
+      }
+      return bytes;
+    }
+  };
+
+  qrcode.stringToBytes = qrcode.stringToBytesFuncs['default'];
+
+  //---------------------------------------------------------------------
+  // qrcode.createStringToBytes
+  //---------------------------------------------------------------------
+
+  /**
+   * @param unicodeData base64 string of byte array.
+   * [16bit Unicode],[16bit Bytes], ...
+   * @param numChars
+   */
+  qrcode.createStringToBytes = function(unicodeData, numChars) {
+
+    // create conversion map.
+
+    var unicodeMap = function() {
+
+      var bin = base64DecodeInputStream(unicodeData);
+      var read = function() {
+        var b = bin.read();
+        if (b == -1) throw 'eof';
+        return b;
+      };
+
+      var count = 0;
+      var unicodeMap = {};
+      while (true) {
+        var b0 = bin.read();
+        if (b0 == -1) break;
+        var b1 = read();
+        var b2 = read();
+        var b3 = read();
+        var k = String.fromCharCode( (b0 << 8) | b1);
+        var v = (b2 << 8) | b3;
+        unicodeMap[k] = v;
+        count += 1;
+      }
+      if (count != numChars) {
+        throw count + ' != ' + numChars;
+      }
+
+      return unicodeMap;
+    }();
+
+    var unknownChar = '?'.charCodeAt(0);
+
+    return function(s) {
+      var bytes = [];
+      for (var i = 0; i < s.length; i += 1) {
+        var c = s.charCodeAt(i);
+        if (c < 128) {
+          bytes.push(c);
+        } else {
+          var b = unicodeMap[s.charAt(i)];
+          if (typeof b == 'number') {
+            if ( (b & 0xff) == b) {
+              // 1byte
+              bytes.push(b);
+            } else {
+              // 2bytes
+              bytes.push(b >>> 8);
+              bytes.push(b & 0xff);
+            }
+          } else {
+            bytes.push(unknownChar);
+          }
+        }
+      }
+      return bytes;
+    };
+  };
+
+  //---------------------------------------------------------------------
+  // QRMode
+  //---------------------------------------------------------------------
+
+  var QRMode = {
+    MODE_NUMBER :    1 << 0,
+    MODE_ALPHA_NUM : 1 << 1,
+    MODE_8BIT_BYTE : 1 << 2,
+    MODE_KANJI :     1 << 3
+  };
+
+  //---------------------------------------------------------------------
+  // QRErrorCorrectionLevel
+  //---------------------------------------------------------------------
+
+  var QRErrorCorrectionLevel = {
+    L : 1,
+    M : 0,
+    Q : 3,
+    H : 2
+  };
+
+  //---------------------------------------------------------------------
+  // QRMaskPattern
+  //---------------------------------------------------------------------
+
+  var QRMaskPattern = {
+    PATTERN000 : 0,
+    PATTERN001 : 1,
+    PATTERN010 : 2,
+    PATTERN011 : 3,
+    PATTERN100 : 4,
+    PATTERN101 : 5,
+    PATTERN110 : 6,
+    PATTERN111 : 7
+  };
+
+  //---------------------------------------------------------------------
+  // QRUtil
+  //---------------------------------------------------------------------
+
+  var QRUtil = function() {
+
+    var PATTERN_POSITION_TABLE = [
+      [],
+      [6, 18],
+      [6, 22],
+      [6, 26],
+      [6, 30],
+      [6, 34],
+      [6, 22, 38],
+      [6, 24, 42],
+      [6, 26, 46],
+      [6, 28, 50],
+      [6, 30, 54],
+      [6, 32, 58],
+      [6, 34, 62],
+      [6, 26, 46, 66],
+      [6, 26, 48, 70],
+      [6, 26, 50, 74],
+      [6, 30, 54, 78],
+      [6, 30, 56, 82],
+      [6, 30, 58, 86],
+      [6, 34, 62, 90],
+      [6, 28, 50, 72, 94],
+      [6, 26, 50, 74, 98],
+      [6, 30, 54, 78, 102],
+      [6, 28, 54, 80, 106],
+      [6, 32, 58, 84, 110],
+      [6, 30, 58, 86, 114],
+      [6, 34, 62, 90, 118],
+      [6, 26, 50, 74, 98, 122],
+      [6, 30, 54, 78, 102, 126],
+      [6, 26, 52, 78, 104, 130],
+      [6, 30, 56, 82, 108, 134],
+      [6, 34, 60, 86, 112, 138],
+      [6, 30, 58, 86, 114, 142],
+      [6, 34, 62, 90, 118, 146],
+      [6, 30, 54, 78, 102, 126, 150],
+      [6, 24, 50, 76, 102, 128, 154],
+      [6, 28, 54, 80, 106, 132, 158],
+      [6, 32, 58, 84, 110, 136, 162],
+      [6, 26, 54, 82, 110, 138, 166],
+      [6, 30, 58, 86, 114, 142, 170]
+    ];
+    var G15 = (1 << 10) | (1 << 8) | (1 << 5) | (1 << 4) | (1 << 2) | (1 << 1) | (1 << 0);
+    var G18 = (1 << 12) | (1 << 11) | (1 << 10) | (1 << 9) | (1 << 8) | (1 << 5) | (1 << 2) | (1 << 0);
+    var G15_MASK = (1 << 14) | (1 << 12) | (1 << 10) | (1 << 4) | (1 << 1);
+
+    var _this = {};
+
+    var getBCHDigit = function(data) {
+      var digit = 0;
+      while (data != 0) {
+        digit += 1;
+        data >>>= 1;
+      }
+      return digit;
+    };
+
+    _this.getBCHTypeInfo = function(data) {
+      var d = data << 10;
+      while (getBCHDigit(d) - getBCHDigit(G15) >= 0) {
+        d ^= (G15 << (getBCHDigit(d) - getBCHDigit(G15) ) );
+      }
+      return ( (data << 10) | d) ^ G15_MASK;
+    };
+
+    _this.getBCHTypeNumber = function(data) {
+      var d = data << 12;
+      while (getBCHDigit(d) - getBCHDigit(G18) >= 0) {
+        d ^= (G18 << (getBCHDigit(d) - getBCHDigit(G18) ) );
+      }
+      return (data << 12) | d;
+    };
+
+    _this.getPatternPosition = function(typeNumber) {
+      return PATTERN_POSITION_TABLE[typeNumber - 1];
+    };
+
+    _this.getMaskFunction = function(maskPattern) {
+
+      switch (maskPattern) {
+
+      case QRMaskPattern.PATTERN000 :
+        return function(i, j) { return (i + j) % 2 == 0; };
+      case QRMaskPattern.PATTERN001 :
+        return function(i, j) { return i % 2 == 0; };
+      case QRMaskPattern.PATTERN010 :
+        return function(i, j) { return j % 3 == 0; };
+      case QRMaskPattern.PATTERN011 :
+        return function(i, j) { return (i + j) % 3 == 0; };
+      case QRMaskPattern.PATTERN100 :
+        return function(i, j) { return (Math.floor(i / 2) + Math.floor(j / 3) ) % 2 == 0; };
+      case QRMaskPattern.PATTERN101 :
+        return function(i, j) { return (i * j) % 2 + (i * j) % 3 == 0; };
+      case QRMaskPattern.PATTERN110 :
+        return function(i, j) { return ( (i * j) % 2 + (i * j) % 3) % 2 == 0; };
+      case QRMaskPattern.PATTERN111 :
+        return function(i, j) { return ( (i * j) % 3 + (i + j) % 2) % 2 == 0; };
+
+      default :
+        throw 'bad maskPattern:' + maskPattern;
+      }
+    };
+
+    _this.getErrorCorrectPolynomial = function(errorCorrectLength) {
+      var a = qrPolynomial([1], 0);
+      for (var i = 0; i < errorCorrectLength; i += 1) {
+        a = a.multiply(qrPolynomial([1, QRMath.gexp(i)], 0) );
+      }
+      return a;
+    };
+
+    _this.getLengthInBits = function(mode, type) {
+
+      if (1 <= type && type < 10) {
+
+        // 1 - 9
+
+        switch(mode) {
+        case QRMode.MODE_NUMBER    : return 10;
+        case QRMode.MODE_ALPHA_NUM : return 9;
+        case QRMode.MODE_8BIT_BYTE : return 8;
+        case QRMode.MODE_KANJI     : return 8;
+        default :
+          throw 'mode:' + mode;
+        }
+
+      } else if (type < 27) {
+
+        // 10 - 26
+
+        switch(mode) {
+        case QRMode.MODE_NUMBER    : return 12;
+        case QRMode.MODE_ALPHA_NUM : return 11;
+        case QRMode.MODE_8BIT_BYTE : return 16;
+        case QRMode.MODE_KANJI     : return 10;
+        default :
+          throw 'mode:' + mode;
+        }
+
+      } else if (type < 41) {
+
+        // 27 - 40
+
+        switch(mode) {
+        case QRMode.MODE_NUMBER    : return 14;
+        case QRMode.MODE_ALPHA_NUM : return 13;
+        case QRMode.MODE_8BIT_BYTE : return 16;
+        case QRMode.MODE_KANJI     : return 12;
+        default :
+          throw 'mode:' + mode;
+        }
+
+      } else {
+        throw 'type:' + type;
+      }
+    };
+
+    _this.getLostPoint = function(qrcode) {
+
+      var moduleCount = qrcode.getModuleCount();
+
+      var lostPoint = 0;
+
+      // LEVEL1
+
+      for (var row = 0; row < moduleCount; row += 1) {
+        for (var col = 0; col < moduleCount; col += 1) {
+
+          var sameCount = 0;
+          var dark = qrcode.isDark(row, col);
+
+          for (var r = -1; r <= 1; r += 1) {
+
+            if (row + r < 0 || moduleCount <= row + r) {
+              continue;
+            }
+
+            for (var c = -1; c <= 1; c += 1) {
+
+              if (col + c < 0 || moduleCount <= col + c) {
+                continue;
+              }
+
+              if (r == 0 && c == 0) {
+                continue;
+              }
+
+              if (dark == qrcode.isDark(row + r, col + c) ) {
+                sameCount += 1;
+              }
+            }
+          }
+
+          if (sameCount > 5) {
+            lostPoint += (3 + sameCount - 5);
+          }
+        }
+      };
+
+      // LEVEL2
+
+      for (var row = 0; row < moduleCount - 1; row += 1) {
+        for (var col = 0; col < moduleCount - 1; col += 1) {
+          var count = 0;
+          if (qrcode.isDark(row, col) ) count += 1;
+          if (qrcode.isDark(row + 1, col) ) count += 1;
+          if (qrcode.isDark(row, col + 1) ) count += 1;
+          if (qrcode.isDark(row + 1, col + 1) ) count += 1;
+          if (count == 0 || count == 4) {
+            lostPoint += 3;
+          }
+        }
+      }
+
+      // LEVEL3
+
+      for (var row = 0; row < moduleCount; row += 1) {
+        for (var col = 0; col < moduleCount - 6; col += 1) {
+          if (qrcode.isDark(row, col)
+              && !qrcode.isDark(row, col + 1)
+              &&  qrcode.isDark(row, col + 2)
+              &&  qrcode.isDark(row, col + 3)
+              &&  qrcode.isDark(row, col + 4)
+              && !qrcode.isDark(row, col + 5)
+              &&  qrcode.isDark(row, col + 6) ) {
+            lostPoint += 40;
+          }
+        }
+      }
+
+      for (var col = 0; col < moduleCount; col += 1) {
+        for (var row = 0; row < moduleCount - 6; row += 1) {
+          if (qrcode.isDark(row, col)
+              && !qrcode.isDark(row + 1, col)
+              &&  qrcode.isDark(row + 2, col)
+              &&  qrcode.isDark(row + 3, col)
+              &&  qrcode.isDark(row + 4, col)
+              && !qrcode.isDark(row + 5, col)
+              &&  qrcode.isDark(row + 6, col) ) {
+            lostPoint += 40;
+          }
+        }
+      }
+
+      // LEVEL4
+
+      var darkCount = 0;
+
+      for (var col = 0; col < moduleCount; col += 1) {
+        for (var row = 0; row < moduleCount; row += 1) {
+          if (qrcode.isDark(row, col) ) {
+            darkCount += 1;
+          }
+        }
+      }
+
+      var ratio = Math.abs(100 * darkCount / moduleCount / moduleCount - 50) / 5;
+      lostPoint += ratio * 10;
+
+      return lostPoint;
+    };
+
+    return _this;
+  }();
+
+  //---------------------------------------------------------------------
+  // QRMath
+  //---------------------------------------------------------------------
+
+  var QRMath = function() {
+
+    var EXP_TABLE = new Array(256);
+    var LOG_TABLE = new Array(256);
+
+    // initialize tables
+    for (var i = 0; i < 8; i += 1) {
+      EXP_TABLE[i] = 1 << i;
+    }
+    for (var i = 8; i < 256; i += 1) {
+      EXP_TABLE[i] = EXP_TABLE[i - 4]
+        ^ EXP_TABLE[i - 5]
+        ^ EXP_TABLE[i - 6]
+        ^ EXP_TABLE[i - 8];
+    }
+    for (var i = 0; i < 255; i += 1) {
+      LOG_TABLE[EXP_TABLE[i] ] = i;
+    }
+
+    var _this = {};
+
+    _this.glog = function(n) {
+
+      if (n < 1) {
+        throw 'glog(' + n + ')';
+      }
+
+      return LOG_TABLE[n];
+    };
+
+    _this.gexp = function(n) {
+
+      while (n < 0) {
+        n += 255;
+      }
+
+      while (n >= 256) {
+        n -= 255;
+      }
+
+      return EXP_TABLE[n];
+    };
+
+    return _this;
+  }();
+
+  //---------------------------------------------------------------------
+  // qrPolynomial
+  //---------------------------------------------------------------------
+
+  function qrPolynomial(num, shift) {
+
+    if (typeof num.length == 'undefined') {
+      throw num.length + '/' + shift;
+    }
+
+    var _num = function() {
+      var offset = 0;
+      while (offset < num.length && num[offset] == 0) {
+        offset += 1;
+      }
+      var _num = new Array(num.length - offset + shift);
+      for (var i = 0; i < num.length - offset; i += 1) {
+        _num[i] = num[i + offset];
+      }
+      return _num;
+    }();
+
+    var _this = {};
+
+    _this.getAt = function(index) {
+      return _num[index];
+    };
+
+    _this.getLength = function() {
+      return _num.length;
+    };
+
+    _this.multiply = function(e) {
+
+      var num = new Array(_this.getLength() + e.getLength() - 1);
+
+      for (var i = 0; i < _this.getLength(); i += 1) {
+        for (var j = 0; j < e.getLength(); j += 1) {
+          num[i + j] ^= QRMath.gexp(QRMath.glog(_this.getAt(i) ) + QRMath.glog(e.getAt(j) ) );
+        }
+      }
+
+      return qrPolynomial(num, 0);
+    };
+
+    _this.mod = function(e) {
+
+      if (_this.getLength() - e.getLength() < 0) {
+        return _this;
+      }
+
+      var ratio = QRMath.glog(_this.getAt(0) ) - QRMath.glog(e.getAt(0) );
+
+      var num = new Array(_this.getLength() );
+      for (var i = 0; i < _this.getLength(); i += 1) {
+        num[i] = _this.getAt(i);
+      }
+
+      for (var i = 0; i < e.getLength(); i += 1) {
+        num[i] ^= QRMath.gexp(QRMath.glog(e.getAt(i) ) + ratio);
+      }
+
+      // recursive call
+      return qrPolynomial(num, 0).mod(e);
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // QRRSBlock
+  //---------------------------------------------------------------------
+
+  var QRRSBlock = function() {
+
+    var RS_BLOCK_TABLE = [
+
+      // L
+      // M
+      // Q
+      // H
+
+      // 1
+      [1, 26, 19],
+      [1, 26, 16],
+      [1, 26, 13],
+      [1, 26, 9],
+
+      // 2
+      [1, 44, 34],
+      [1, 44, 28],
+      [1, 44, 22],
+      [1, 44, 16],
+
+      // 3
+      [1, 70, 55],
+      [1, 70, 44],
+      [2, 35, 17],
+      [2, 35, 13],
+
+      // 4
+      [1, 100, 80],
+      [2, 50, 32],
+      [2, 50, 24],
+      [4, 25, 9],
+
+      // 5
+      [1, 134, 108],
+      [2, 67, 43],
+      [2, 33, 15, 2, 34, 16],
+      [2, 33, 11, 2, 34, 12],
+
+      // 6
+      [2, 86, 68],
+      [4, 43, 27],
+      [4, 43, 19],
+      [4, 43, 15],
+
+      // 7
+      [2, 98, 78],
+      [4, 49, 31],
+      [2, 32, 14, 4, 33, 15],
+      [4, 39, 13, 1, 40, 14],
+
+      // 8
+      [2, 121, 97],
+      [2, 60, 38, 2, 61, 39],
+      [4, 40, 18, 2, 41, 19],
+      [4, 40, 14, 2, 41, 15],
+
+      // 9
+      [2, 146, 116],
+      [3, 58, 36, 2, 59, 37],
+      [4, 36, 16, 4, 37, 17],
+      [4, 36, 12, 4, 37, 13],
+
+      // 10
+      [2, 86, 68, 2, 87, 69],
+      [4, 69, 43, 1, 70, 44],
+      [6, 43, 19, 2, 44, 20],
+      [6, 43, 15, 2, 44, 16],
+
+      // 11
+      [4, 101, 81],
+      [1, 80, 50, 4, 81, 51],
+      [4, 50, 22, 4, 51, 23],
+      [3, 36, 12, 8, 37, 13],
+
+      // 12
+      [2, 116, 92, 2, 117, 93],
+      [6, 58, 36, 2, 59, 37],
+      [4, 46, 20, 6, 47, 21],
+      [7, 42, 14, 4, 43, 15],
+
+      // 13
+      [4, 133, 107],
+      [8, 59, 37, 1, 60, 38],
+      [8, 44, 20, 4, 45, 21],
+      [12, 33, 11, 4, 34, 12],
+
+      // 14
+      [3, 145, 115, 1, 146, 116],
+      [4, 64, 40, 5, 65, 41],
+      [11, 36, 16, 5, 37, 17],
+      [11, 36, 12, 5, 37, 13],
+
+      // 15
+      [5, 109, 87, 1, 110, 88],
+      [5, 65, 41, 5, 66, 42],
+      [5, 54, 24, 7, 55, 25],
+      [11, 36, 12, 7, 37, 13],
+
+      // 16
+      [5, 122, 98, 1, 123, 99],
+      [7, 73, 45, 3, 74, 46],
+      [15, 43, 19, 2, 44, 20],
+      [3, 45, 15, 13, 46, 16],
+
+      // 17
+      [1, 135, 107, 5, 136, 108],
+      [10, 74, 46, 1, 75, 47],
+      [1, 50, 22, 15, 51, 23],
+      [2, 42, 14, 17, 43, 15],
+
+      // 18
+      [5, 150, 120, 1, 151, 121],
+      [9, 69, 43, 4, 70, 44],
+      [17, 50, 22, 1, 51, 23],
+      [2, 42, 14, 19, 43, 15],
+
+      // 19
+      [3, 141, 113, 4, 142, 114],
+      [3, 70, 44, 11, 71, 45],
+      [17, 47, 21, 4, 48, 22],
+      [9, 39, 13, 16, 40, 14],
+
+      // 20
+      [3, 135, 107, 5, 136, 108],
+      [3, 67, 41, 13, 68, 42],
+      [15, 54, 24, 5, 55, 25],
+      [15, 43, 15, 10, 44, 16],
+
+      // 21
+      [4, 144, 116, 4, 145, 117],
+      [17, 68, 42],
+      [17, 50, 22, 6, 51, 23],
+      [19, 46, 16, 6, 47, 17],
+
+      // 22
+      [2, 139, 111, 7, 140, 112],
+      [17, 74, 46],
+      [7, 54, 24, 16, 55, 25],
+      [34, 37, 13],
+
+      // 23
+      [4, 151, 121, 5, 152, 122],
+      [4, 75, 47, 14, 76, 48],
+      [11, 54, 24, 14, 55, 25],
+      [16, 45, 15, 14, 46, 16],
+
+      // 24
+      [6, 147, 117, 4, 148, 118],
+      [6, 73, 45, 14, 74, 46],
+      [11, 54, 24, 16, 55, 25],
+      [30, 46, 16, 2, 47, 17],
+
+      // 25
+      [8, 132, 106, 4, 133, 107],
+      [8, 75, 47, 13, 76, 48],
+      [7, 54, 24, 22, 55, 25],
+      [22, 45, 15, 13, 46, 16],
+
+      // 26
+      [10, 142, 114, 2, 143, 115],
+      [19, 74, 46, 4, 75, 47],
+      [28, 50, 22, 6, 51, 23],
+      [33, 46, 16, 4, 47, 17],
+
+      // 27
+      [8, 152, 122, 4, 153, 123],
+      [22, 73, 45, 3, 74, 46],
+      [8, 53, 23, 26, 54, 24],
+      [12, 45, 15, 28, 46, 16],
+
+      // 28
+      [3, 147, 117, 10, 148, 118],
+      [3, 73, 45, 23, 74, 46],
+      [4, 54, 24, 31, 55, 25],
+      [11, 45, 15, 31, 46, 16],
+
+      // 29
+      [7, 146, 116, 7, 147, 117],
+      [21, 73, 45, 7, 74, 46],
+      [1, 53, 23, 37, 54, 24],
+      [19, 45, 15, 26, 46, 16],
+
+      // 30
+      [5, 145, 115, 10, 146, 116],
+      [19, 75, 47, 10, 76, 48],
+      [15, 54, 24, 25, 55, 25],
+      [23, 45, 15, 25, 46, 16],
+
+      // 31
+      [13, 145, 115, 3, 146, 116],
+      [2, 74, 46, 29, 75, 47],
+      [42, 54, 24, 1, 55, 25],
+      [23, 45, 15, 28, 46, 16],
+
+      // 32
+      [17, 145, 115],
+      [10, 74, 46, 23, 75, 47],
+      [10, 54, 24, 35, 55, 25],
+      [19, 45, 15, 35, 46, 16],
+
+      // 33
+      [17, 145, 115, 1, 146, 116],
+      [14, 74, 46, 21, 75, 47],
+      [29, 54, 24, 19, 55, 25],
+      [11, 45, 15, 46, 46, 16],
+
+      // 34
+      [13, 145, 115, 6, 146, 116],
+      [14, 74, 46, 23, 75, 47],
+      [44, 54, 24, 7, 55, 25],
+      [59, 46, 16, 1, 47, 17],
+
+      // 35
+      [12, 151, 121, 7, 152, 122],
+      [12, 75, 47, 26, 76, 48],
+      [39, 54, 24, 14, 55, 25],
+      [22, 45, 15, 41, 46, 16],
+
+      // 36
+      [6, 151, 121, 14, 152, 122],
+      [6, 75, 47, 34, 76, 48],
+      [46, 54, 24, 10, 55, 25],
+      [2, 45, 15, 64, 46, 16],
+
+      // 37
+      [17, 152, 122, 4, 153, 123],
+      [29, 74, 46, 14, 75, 47],
+      [49, 54, 24, 10, 55, 25],
+      [24, 45, 15, 46, 46, 16],
+
+      // 38
+      [4, 152, 122, 18, 153, 123],
+      [13, 74, 46, 32, 75, 47],
+      [48, 54, 24, 14, 55, 25],
+      [42, 45, 15, 32, 46, 16],
+
+      // 39
+      [20, 147, 117, 4, 148, 118],
+      [40, 75, 47, 7, 76, 48],
+      [43, 54, 24, 22, 55, 25],
+      [10, 45, 15, 67, 46, 16],
+
+      // 40
+      [19, 148, 118, 6, 149, 119],
+      [18, 75, 47, 31, 76, 48],
+      [34, 54, 24, 34, 55, 25],
+      [20, 45, 15, 61, 46, 16]
+    ];
+
+    var qrRSBlock = function(totalCount, dataCount) {
+      var _this = {};
+      _this.totalCount = totalCount;
+      _this.dataCount = dataCount;
+      return _this;
+    };
+
+    var _this = {};
+
+    var getRsBlockTable = function(typeNumber, errorCorrectionLevel) {
+
+      switch(errorCorrectionLevel) {
+      case QRErrorCorrectionLevel.L :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 0];
+      case QRErrorCorrectionLevel.M :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 1];
+      case QRErrorCorrectionLevel.Q :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 2];
+      case QRErrorCorrectionLevel.H :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 3];
+      default :
+        return undefined;
+      }
+    };
+
+    _this.getRSBlocks = function(typeNumber, errorCorrectionLevel) {
+
+      var rsBlock = getRsBlockTable(typeNumber, errorCorrectionLevel);
+
+      if (typeof rsBlock == 'undefined') {
+        throw 'bad rs block @ typeNumber:' + typeNumber +
+            '/errorCorrectionLevel:' + errorCorrectionLevel;
+      }
+
+      var length = rsBlock.length / 3;
+
+      var list = [];
+
+      for (var i = 0; i < length; i += 1) {
+
+        var count = rsBlock[i * 3 + 0];
+        var totalCount = rsBlock[i * 3 + 1];
+        var dataCount = rsBlock[i * 3 + 2];
+
+        for (var j = 0; j < count; j += 1) {
+          list.push(qrRSBlock(totalCount, dataCount) );
+        }
+      }
+
+      return list;
+    };
+
+    return _this;
+  }();
+
+  //---------------------------------------------------------------------
+  // qrBitBuffer
+  //---------------------------------------------------------------------
+
+  var qrBitBuffer = function() {
+
+    var _buffer = [];
+    var _length = 0;
+
+    var _this = {};
+
+    _this.getBuffer = function() {
+      return _buffer;
+    };
+
+    _this.getAt = function(index) {
+      var bufIndex = Math.floor(index / 8);
+      return ( (_buffer[bufIndex] >>> (7 - index % 8) ) & 1) == 1;
+    };
+
+    _this.put = function(num, length) {
+      for (var i = 0; i < length; i += 1) {
+        _this.putBit( ( (num >>> (length - i - 1) ) & 1) == 1);
+      }
+    };
+
+    _this.getLengthInBits = function() {
+      return _length;
+    };
+
+    _this.putBit = function(bit) {
+
+      var bufIndex = Math.floor(_length / 8);
+      if (_buffer.length <= bufIndex) {
+        _buffer.push(0);
+      }
+
+      if (bit) {
+        _buffer[bufIndex] |= (0x80 >>> (_length % 8) );
+      }
+
+      _length += 1;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrNumber
+  //---------------------------------------------------------------------
+
+  var qrNumber = function(data) {
+
+    var _mode = QRMode.MODE_NUMBER;
+    var _data = data;
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return _data.length;
+    };
+
+    _this.write = function(buffer) {
+
+      var data = _data;
+
+      var i = 0;
+
+      while (i + 2 < data.length) {
+        buffer.put(strToNum(data.substring(i, i + 3) ), 10);
+        i += 3;
+      }
+
+      if (i < data.length) {
+        if (data.length - i == 1) {
+          buffer.put(strToNum(data.substring(i, i + 1) ), 4);
+        } else if (data.length - i == 2) {
+          buffer.put(strToNum(data.substring(i, i + 2) ), 7);
+        }
+      }
+    };
+
+    var strToNum = function(s) {
+      var num = 0;
+      for (var i = 0; i < s.length; i += 1) {
+        num = num * 10 + chatToNum(s.charAt(i) );
+      }
+      return num;
+    };
+
+    var chatToNum = function(c) {
+      if ('0' <= c && c <= '9') {
+        return c.charCodeAt(0) - '0'.charCodeAt(0);
+      }
+      throw 'illegal char :' + c;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrAlphaNum
+  //---------------------------------------------------------------------
+
+  var qrAlphaNum = function(data) {
+
+    var _mode = QRMode.MODE_ALPHA_NUM;
+    var _data = data;
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return _data.length;
+    };
+
+    _this.write = function(buffer) {
+
+      var s = _data;
+
+      var i = 0;
+
+      while (i + 1 < s.length) {
+        buffer.put(
+          getCode(s.charAt(i) ) * 45 +
+          getCode(s.charAt(i + 1) ), 11);
+        i += 2;
+      }
+
+      if (i < s.length) {
+        buffer.put(getCode(s.charAt(i) ), 6);
+      }
+    };
+
+    var getCode = function(c) {
+
+      if ('0' <= c && c <= '9') {
+        return c.charCodeAt(0) - '0'.charCodeAt(0);
+      } else if ('A' <= c && c <= 'Z') {
+        return c.charCodeAt(0) - 'A'.charCodeAt(0) + 10;
+      } else {
+        switch (c) {
+        case ' ' : return 36;
+        case '$' : return 37;
+        case '%' : return 38;
+        case '*' : return 39;
+        case '+' : return 40;
+        case '-' : return 41;
+        case '.' : return 42;
+        case '/' : return 43;
+        case ':' : return 44;
+        default :
+          throw 'illegal char :' + c;
+        }
+      }
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qr8BitByte
+  //---------------------------------------------------------------------
+
+  var qr8BitByte = function(data) {
+
+    var _mode = QRMode.MODE_8BIT_BYTE;
+    var _data = data;
+    var _bytes = qrcode.stringToBytes(data);
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return _bytes.length;
+    };
+
+    _this.write = function(buffer) {
+      for (var i = 0; i < _bytes.length; i += 1) {
+        buffer.put(_bytes[i], 8);
+      }
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrKanji
+  //---------------------------------------------------------------------
+
+  var qrKanji = function(data) {
+
+    var _mode = QRMode.MODE_KANJI;
+    var _data = data;
+
+    var stringToBytes = qrcode.stringToBytesFuncs['SJIS'];
+    if (!stringToBytes) {
+      throw 'sjis not supported.';
+    }
+    !function(c, code) {
+      // self test for sjis support.
+      var test = stringToBytes(c);
+      if (test.length != 2 || ( (test[0] << 8) | test[1]) != code) {
+        throw 'sjis not supported.';
+      }
+    }('\u53cb', 0x9746);
+
+    var _bytes = stringToBytes(data);
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return ~~(_bytes.length / 2);
+    };
+
+    _this.write = function(buffer) {
+
+      var data = _bytes;
+
+      var i = 0;
+
+      while (i + 1 < data.length) {
+
+        var c = ( (0xff & data[i]) << 8) | (0xff & data[i + 1]);
+
+        if (0x8140 <= c && c <= 0x9FFC) {
+          c -= 0x8140;
+        } else if (0xE040 <= c && c <= 0xEBBF) {
+          c -= 0xC140;
+        } else {
+          throw 'illegal char at ' + (i + 1) + '/' + c;
+        }
+
+        c = ( (c >>> 8) & 0xff) * 0xC0 + (c & 0xff);
+
+        buffer.put(c, 13);
+
+        i += 2;
+      }
+
+      if (i < data.length) {
+        throw 'illegal char at ' + (i + 1);
+      }
+    };
+
+    return _this;
+  };
+
+  //=====================================================================
+  // GIF Support etc.
+  //
+
+  //---------------------------------------------------------------------
+  // byteArrayOutputStream
+  //---------------------------------------------------------------------
+
+  var byteArrayOutputStream = function() {
+
+    var _bytes = [];
+
+    var _this = {};
+
+    _this.writeByte = function(b) {
+      _bytes.push(b & 0xff);
+    };
+
+    _this.writeShort = function(i) {
+      _this.writeByte(i);
+      _this.writeByte(i >>> 8);
+    };
+
+    _this.writeBytes = function(b, off, len) {
+      off = off || 0;
+      len = len || b.length;
+      for (var i = 0; i < len; i += 1) {
+        _this.writeByte(b[i + off]);
+      }
+    };
+
+    _this.writeString = function(s) {
+      for (var i = 0; i < s.length; i += 1) {
+        _this.writeByte(s.charCodeAt(i) );
+      }
+    };
+
+    _this.toByteArray = function() {
+      return _bytes;
+    };
+
+    _this.toString = function() {
+      var s = '';
+      s += '[';
+      for (var i = 0; i < _bytes.length; i += 1) {
+        if (i > 0) {
+          s += ',';
+        }
+        s += _bytes[i];
+      }
+      s += ']';
+      return s;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // base64EncodeOutputStream
+  //---------------------------------------------------------------------
+
+  var base64EncodeOutputStream = function() {
+
+    var _buffer = 0;
+    var _buflen = 0;
+    var _length = 0;
+    var _base64 = '';
+
+    var _this = {};
+
+    var writeEncoded = function(b) {
+      _base64 += String.fromCharCode(encode(b & 0x3f) );
+    };
+
+    var encode = function(n) {
+      if (n < 0) {
+        // error.
+      } else if (n < 26) {
+        return 0x41 + n;
+      } else if (n < 52) {
+        return 0x61 + (n - 26);
+      } else if (n < 62) {
+        return 0x30 + (n - 52);
+      } else if (n == 62) {
+        return 0x2b;
+      } else if (n == 63) {
+        return 0x2f;
+      }
+      throw 'n:' + n;
+    };
+
+    _this.writeByte = function(n) {
+
+      _buffer = (_buffer << 8) | (n & 0xff);
+      _buflen += 8;
+      _length += 1;
+
+      while (_buflen >= 6) {
+        writeEncoded(_buffer >>> (_buflen - 6) );
+        _buflen -= 6;
+      }
+    };
+
+    _this.flush = function() {
+
+      if (_buflen > 0) {
+        writeEncoded(_buffer << (6 - _buflen) );
+        _buffer = 0;
+        _buflen = 0;
+      }
+
+      if (_length % 3 != 0) {
+        // padding
+        var padlen = 3 - _length % 3;
+        for (var i = 0; i < padlen; i += 1) {
+          _base64 += '=';
+        }
+      }
+    };
+
+    _this.toString = function() {
+      return _base64;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // base64DecodeInputStream
+  //---------------------------------------------------------------------
+
+  var base64DecodeInputStream = function(str) {
+
+    var _str = str;
+    var _pos = 0;
+    var _buffer = 0;
+    var _buflen = 0;
+
+    var _this = {};
+
+    _this.read = function() {
+
+      while (_buflen < 8) {
+
+        if (_pos >= _str.length) {
+          if (_buflen == 0) {
+            return -1;
+          }
+          throw 'unexpected end of file./' + _buflen;
+        }
+
+        var c = _str.charAt(_pos);
+        _pos += 1;
+
+        if (c == '=') {
+          _buflen = 0;
+          return -1;
+        } else if (c.match(/^\s$/) ) {
+          // ignore if whitespace.
+          continue;
+        }
+
+        _buffer = (_buffer << 6) | decode(c.charCodeAt(0) );
+        _buflen += 6;
+      }
+
+      var n = (_buffer >>> (_buflen - 8) ) & 0xff;
+      _buflen -= 8;
+      return n;
+    };
+
+    var decode = function(c) {
+      if (0x41 <= c && c <= 0x5a) {
+        return c - 0x41;
+      } else if (0x61 <= c && c <= 0x7a) {
+        return c - 0x61 + 26;
+      } else if (0x30 <= c && c <= 0x39) {
+        return c - 0x30 + 52;
+      } else if (c == 0x2b) {
+        return 62;
+      } else if (c == 0x2f) {
+        return 63;
+      } else {
+        throw 'c:' + c;
+      }
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // gifImage (B/W)
+  //---------------------------------------------------------------------
+
+  var gifImage = function(width, height) {
+
+    var _width = width;
+    var _height = height;
+    var _data = new Array(width * height);
+
+    var _this = {};
+
+    _this.setPixel = function(x, y, pixel) {
+      _data[y * _width + x] = pixel;
+    };
+
+    _this.write = function(out) {
+
+      //---------------------------------
+      // GIF Signature
+
+      out.writeString('GIF87a');
+
+      //---------------------------------
+      // Screen Descriptor
+
+      out.writeShort(_width);
+      out.writeShort(_height);
+
+      out.writeByte(0x80); // 2bit
+      out.writeByte(0);
+      out.writeByte(0);
+
+      //---------------------------------
+      // Global Color Map
+
+      // black
+      out.writeByte(0x00);
+      out.writeByte(0x00);
+      out.writeByte(0x00);
+
+      // white
+      out.writeByte(0xff);
+      out.writeByte(0xff);
+      out.writeByte(0xff);
+
+      //---------------------------------
+      // Image Descriptor
+
+      out.writeString(',');
+      out.writeShort(0);
+      out.writeShort(0);
+      out.writeShort(_width);
+      out.writeShort(_height);
+      out.writeByte(0);
+
+      //---------------------------------
+      // Local Color Map
+
+      //---------------------------------
+      // Raster Data
+
+      var lzwMinCodeSize = 2;
+      var raster = getLZWRaster(lzwMinCodeSize);
+
+      out.writeByte(lzwMinCodeSize);
+
+      var offset = 0;
+
+      while (raster.length - offset > 255) {
+        out.writeByte(255);
+        out.writeBytes(raster, offset, 255);
+        offset += 255;
+      }
+
+      out.writeByte(raster.length - offset);
+      out.writeBytes(raster, offset, raster.length - offset);
+      out.writeByte(0x00);
+
+      //---------------------------------
+      // GIF Terminator
+      out.writeString(';');
+    };
+
+    var bitOutputStream = function(out) {
+
+      var _out = out;
+      var _bitLength = 0;
+      var _bitBuffer = 0;
+
+      var _this = {};
+
+      _this.write = function(data, length) {
+
+        if ( (data >>> length) != 0) {
+          throw 'length over';
+        }
+
+        while (_bitLength + length >= 8) {
+          _out.writeByte(0xff & ( (data << _bitLength) | _bitBuffer) );
+          length -= (8 - _bitLength);
+          data >>>= (8 - _bitLength);
+          _bitBuffer = 0;
+          _bitLength = 0;
+        }
+
+        _bitBuffer = (data << _bitLength) | _bitBuffer;
+        _bitLength = _bitLength + length;
+      };
+
+      _this.flush = function() {
+        if (_bitLength > 0) {
+          _out.writeByte(_bitBuffer);
+        }
+      };
+
+      return _this;
+    };
+
+    var getLZWRaster = function(lzwMinCodeSize) {
+
+      var clearCode = 1 << lzwMinCodeSize;
+      var endCode = (1 << lzwMinCodeSize) + 1;
+      var bitLength = lzwMinCodeSize + 1;
+
+      // Setup LZWTable
+      var table = lzwTable();
+
+      for (var i = 0; i < clearCode; i += 1) {
+        table.add(String.fromCharCode(i) );
+      }
+      table.add(String.fromCharCode(clearCode) );
+      table.add(String.fromCharCode(endCode) );
+
+      var byteOut = byteArrayOutputStream();
+      var bitOut = bitOutputStream(byteOut);
+
+      // clear code
+      bitOut.write(clearCode, bitLength);
+
+      var dataIndex = 0;
+
+      var s = String.fromCharCode(_data[dataIndex]);
+      dataIndex += 1;
+
+      while (dataIndex < _data.length) {
+
+        var c = String.fromCharCode(_data[dataIndex]);
+        dataIndex += 1;
+
+        if (table.contains(s + c) ) {
+
+          s = s + c;
+
+        } else {
+
+          bitOut.write(table.indexOf(s), bitLength);
+
+          if (table.size() < 0xfff) {
+
+            if (table.size() == (1 << bitLength) ) {
+              bitLength += 1;
+            }
+
+            table.add(s + c);
+          }
+
+          s = c;
+        }
+      }
+
+      bitOut.write(table.indexOf(s), bitLength);
+
+      // end code
+      bitOut.write(endCode, bitLength);
+
+      bitOut.flush();
+
+      return byteOut.toByteArray();
+    };
+
+    var lzwTable = function() {
+
+      var _map = {};
+      var _size = 0;
+
+      var _this = {};
+
+      _this.add = function(key) {
+        if (_this.contains(key) ) {
+          throw 'dup key:' + key;
+        }
+        _map[key] = _size;
+        _size += 1;
+      };
+
+      _this.size = function() {
+        return _size;
+      };
+
+      _this.indexOf = function(key) {
+        return _map[key];
+      };
+
+      _this.contains = function(key) {
+        return typeof _map[key] != 'undefined';
+      };
+
+      return _this;
+    };
+
+    return _this;
+  };
+
+  var createDataURL = function(width, height, getPixel) {
+    var gif = gifImage(width, height);
+    for (var y = 0; y < height; y += 1) {
+      for (var x = 0; x < width; x += 1) {
+        gif.setPixel(x, y, getPixel(x, y) );
+      }
+    }
+
+    var b = byteArrayOutputStream();
+    gif.write(b);
+
+    var base64 = base64EncodeOutputStream();
+    var bytes = b.toByteArray();
+    for (var i = 0; i < bytes.length; i += 1) {
+      base64.writeByte(bytes[i]);
+    }
+    base64.flush();
+
+    return 'data:image/gif;base64,' + base64;
+  };
+
+  //---------------------------------------------------------------------
+  // returns qrcode function.
+
+  return qrcode;
+}();
+
+// multibyte support
+!function() {
+
+  qrcode.stringToBytesFuncs['UTF-8'] = function(s) {
+    // http://stackoverflow.com/questions/18729405/how-to-convert-utf8-string-to-byte-array
+    function toUTF8Array(str) {
+      var utf8 = [];
+      for (var i=0; i < str.length; i++) {
+        var charcode = str.charCodeAt(i);
+        if (charcode < 0x80) utf8.push(charcode);
+        else if (charcode < 0x800) {
+          utf8.push(0xc0 | (charcode >> 6),
+              0x80 | (charcode & 0x3f));
+        }
+        else if (charcode < 0xd800 || charcode >= 0xe000) {
+          utf8.push(0xe0 | (charcode >> 12),
+              0x80 | ((charcode>>6) & 0x3f),
+              0x80 | (charcode & 0x3f));
+        }
+        // surrogate pair
+        else {
+          i++;
+          // UTF-16 encodes 0x10000-0x10FFFF by
+          // subtracting 0x10000 and splitting the
+          // 20 bits of 0x0-0xFFFFF into two halves
+          charcode = 0x10000 + (((charcode & 0x3ff)<<10)
+            | (str.charCodeAt(i) & 0x3ff));
+          utf8.push(0xf0 | (charcode >>18),
+              0x80 | ((charcode>>12) & 0x3f),
+              0x80 | ((charcode>>6) & 0x3f),
+              0x80 | (charcode & 0x3f));
+        }
+      }
+      return utf8;
+    }
+    return toUTF8Array(s);
+  };
+
+}();
+
+window.qrcode = qrcode;
+</script>
+
+<!--
+================================================================================
+DATA: BIP39 English wordlist (2048 words)
+Source: bip39 npm package (which mirrors the bitcoin/bips reference list).
+This list is canonical; words are ordered, and a word's index in the list is
+its 11-bit code in the BIP39 encoding.
+================================================================================
+-->
+<script>
+const BIP39_WORDS = [
+    "abandon",
+    "ability",
+    "able",
+    "about",
+    "above",
+    "absent",
+    "absorb",
+    "abstract",
+    "absurd",
+    "abuse",
+    "access",
+    "accident",
+    "account",
+    "accuse",
+    "achieve",
+    "acid",
+    "acoustic",
+    "acquire",
+    "across",
+    "act",
+    "action",
+    "actor",
+    "actress",
+    "actual",
+    "adapt",
+    "add",
+    "addict",
+    "address",
+    "adjust",
+    "admit",
+    "adult",
+    "advance",
+    "advice",
+    "aerobic",
+    "affair",
+    "afford",
+    "afraid",
+    "again",
+    "age",
+    "agent",
+    "agree",
+    "ahead",
+    "aim",
+    "air",
+    "airport",
+    "aisle",
+    "alarm",
+    "album",
+    "alcohol",
+    "alert",
+    "alien",
+    "all",
+    "alley",
+    "allow",
+    "almost",
+    "alone",
+    "alpha",
+    "already",
+    "also",
+    "alter",
+    "always",
+    "amateur",
+    "amazing",
+    "among",
+    "amount",
+    "amused",
+    "analyst",
+    "anchor",
+    "ancient",
+    "anger",
+    "angle",
+    "angry",
+    "animal",
+    "ankle",
+    "announce",
+    "annual",
+    "another",
+    "answer",
+    "antenna",
+    "antique",
+    "anxiety",
+    "any",
+    "apart",
+    "apology",
+    "appear",
+    "apple",
+    "approve",
+    "april",
+    "arch",
+    "arctic",
+    "area",
+    "arena",
+    "argue",
+    "arm",
+    "armed",
+    "armor",
+    "army",
+    "around",
+    "arrange",
+    "arrest",
+    "arrive",
+    "arrow",
+    "art",
+    "artefact",
+    "artist",
+    "artwork",
+    "ask",
+    "aspect",
+    "assault",
+    "asset",
+    "assist",
+    "assume",
+    "asthma",
+    "athlete",
+    "atom",
+    "attack",
+    "attend",
+    "attitude",
+    "attract",
+    "auction",
+    "audit",
+    "august",
+    "aunt",
+    "author",
+    "auto",
+    "autumn",
+    "average",
+    "avocado",
+    "avoid",
+    "awake",
+    "aware",
+    "away",
+    "awesome",
+    "awful",
+    "awkward",
+    "axis",
+    "baby",
+    "bachelor",
+    "bacon",
+    "badge",
+    "bag",
+    "balance",
+    "balcony",
+    "ball",
+    "bamboo",
+    "banana",
+    "banner",
+    "bar",
+    "barely",
+    "bargain",
+    "barrel",
+    "base",
+    "basic",
+    "basket",
+    "battle",
+    "beach",
+    "bean",
+    "beauty",
+    "because",
+    "become",
+    "beef",
+    "before",
+    "begin",
+    "behave",
+    "behind",
+    "believe",
+    "below",
+    "belt",
+    "bench",
+    "benefit",
+    "best",
+    "betray",
+    "better",
+    "between",
+    "beyond",
+    "bicycle",
+    "bid",
+    "bike",
+    "bind",
+    "biology",
+    "bird",
+    "birth",
+    "bitter",
+    "black",
+    "blade",
+    "blame",
+    "blanket",
+    "blast",
+    "bleak",
+    "bless",
+    "blind",
+    "blood",
+    "blossom",
+    "blouse",
+    "blue",
+    "blur",
+    "blush",
+    "board",
+    "boat",
+    "body",
+    "boil",
+    "bomb",
+    "bone",
+    "bonus",
+    "book",
+    "boost",
+    "border",
+    "boring",
+    "borrow",
+    "boss",
+    "bottom",
+    "bounce",
+    "box",
+    "boy",
+    "bracket",
+    "brain",
+    "brand",
+    "brass",
+    "brave",
+    "bread",
+    "breeze",
+    "brick",
+    "bridge",
+    "brief",
+    "bright",
+    "bring",
+    "brisk",
+    "broccoli",
+    "broken",
+    "bronze",
+    "broom",
+    "brother",
+    "brown",
+    "brush",
+    "bubble",
+    "buddy",
+    "budget",
+    "buffalo",
+    "build",
+    "bulb",
+    "bulk",
+    "bullet",
+    "bundle",
+    "bunker",
+    "burden",
+    "burger",
+    "burst",
+    "bus",
+    "business",
+    "busy",
+    "butter",
+    "buyer",
+    "buzz",
+    "cabbage",
+    "cabin",
+    "cable",
+    "cactus",
+    "cage",
+    "cake",
+    "call",
+    "calm",
+    "camera",
+    "camp",
+    "can",
+    "canal",
+    "cancel",
+    "candy",
+    "cannon",
+    "canoe",
+    "canvas",
+    "canyon",
+    "capable",
+    "capital",
+    "captain",
+    "car",
+    "carbon",
+    "card",
+    "cargo",
+    "carpet",
+    "carry",
+    "cart",
+    "case",
+    "cash",
+    "casino",
+    "castle",
+    "casual",
+    "cat",
+    "catalog",
+    "catch",
+    "category",
+    "cattle",
+    "caught",
+    "cause",
+    "caution",
+    "cave",
+    "ceiling",
+    "celery",
+    "cement",
+    "census",
+    "century",
+    "cereal",
+    "certain",
+    "chair",
+    "chalk",
+    "champion",
+    "change",
+    "chaos",
+    "chapter",
+    "charge",
+    "chase",
+    "chat",
+    "cheap",
+    "check",
+    "cheese",
+    "chef",
+    "cherry",
+    "chest",
+    "chicken",
+    "chief",
+    "child",
+    "chimney",
+    "choice",
+    "choose",
+    "chronic",
+    "chuckle",
+    "chunk",
+    "churn",
+    "cigar",
+    "cinnamon",
+    "circle",
+    "citizen",
+    "city",
+    "civil",
+    "claim",
+    "clap",
+    "clarify",
+    "claw",
+    "clay",
+    "clean",
+    "clerk",
+    "clever",
+    "click",
+    "client",
+    "cliff",
+    "climb",
+    "clinic",
+    "clip",
+    "clock",
+    "clog",
+    "close",
+    "cloth",
+    "cloud",
+    "clown",
+    "club",
+    "clump",
+    "cluster",
+    "clutch",
+    "coach",
+    "coast",
+    "coconut",
+    "code",
+    "coffee",
+    "coil",
+    "coin",
+    "collect",
+    "color",
+    "column",
+    "combine",
+    "come",
+    "comfort",
+    "comic",
+    "common",
+    "company",
+    "concert",
+    "conduct",
+    "confirm",
+    "congress",
+    "connect",
+    "consider",
+    "control",
+    "convince",
+    "cook",
+    "cool",
+    "copper",
+    "copy",
+    "coral",
+    "core",
+    "corn",
+    "correct",
+    "cost",
+    "cotton",
+    "couch",
+    "country",
+    "couple",
+    "course",
+    "cousin",
+    "cover",
+    "coyote",
+    "crack",
+    "cradle",
+    "craft",
+    "cram",
+    "crane",
+    "crash",
+    "crater",
+    "crawl",
+    "crazy",
+    "cream",
+    "credit",
+    "creek",
+    "crew",
+    "cricket",
+    "crime",
+    "crisp",
+    "critic",
+    "crop",
+    "cross",
+    "crouch",
+    "crowd",
+    "crucial",
+    "cruel",
+    "cruise",
+    "crumble",
+    "crunch",
+    "crush",
+    "cry",
+    "crystal",
+    "cube",
+    "culture",
+    "cup",
+    "cupboard",
+    "curious",
+    "current",
+    "curtain",
+    "curve",
+    "cushion",
+    "custom",
+    "cute",
+    "cycle",
+    "dad",
+    "damage",
+    "damp",
+    "dance",
+    "danger",
+    "daring",
+    "dash",
+    "daughter",
+    "dawn",
+    "day",
+    "deal",
+    "debate",
+    "debris",
+    "decade",
+    "december",
+    "decide",
+    "decline",
+    "decorate",
+    "decrease",
+    "deer",
+    "defense",
+    "define",
+    "defy",
+    "degree",
+    "delay",
+    "deliver",
+    "demand",
+    "demise",
+    "denial",
+    "dentist",
+    "deny",
+    "depart",
+    "depend",
+    "deposit",
+    "depth",
+    "deputy",
+    "derive",
+    "describe",
+    "desert",
+    "design",
+    "desk",
+    "despair",
+    "destroy",
+    "detail",
+    "detect",
+    "develop",
+    "device",
+    "devote",
+    "diagram",
+    "dial",
+    "diamond",
+    "diary",
+    "dice",
+    "diesel",
+    "diet",
+    "differ",
+    "digital",
+    "dignity",
+    "dilemma",
+    "dinner",
+    "dinosaur",
+    "direct",
+    "dirt",
+    "disagree",
+    "discover",
+    "disease",
+    "dish",
+    "dismiss",
+    "disorder",
+    "display",
+    "distance",
+    "divert",
+    "divide",
+    "divorce",
+    "dizzy",
+    "doctor",
+    "document",
+    "dog",
+    "doll",
+    "dolphin",
+    "domain",
+    "donate",
+    "donkey",
+    "donor",
+    "door",
+    "dose",
+    "double",
+    "dove",
+    "draft",
+    "dragon",
+    "drama",
+    "drastic",
+    "draw",
+    "dream",
+    "dress",
+    "drift",
+    "drill",
+    "drink",
+    "drip",
+    "drive",
+    "drop",
+    "drum",
+    "dry",
+    "duck",
+    "dumb",
+    "dune",
+    "during",
+    "dust",
+    "dutch",
+    "duty",
+    "dwarf",
+    "dynamic",
+    "eager",
+    "eagle",
+    "early",
+    "earn",
+    "earth",
+    "easily",
+    "east",
+    "easy",
+    "echo",
+    "ecology",
+    "economy",
+    "edge",
+    "edit",
+    "educate",
+    "effort",
+    "egg",
+    "eight",
+    "either",
+    "elbow",
+    "elder",
+    "electric",
+    "elegant",
+    "element",
+    "elephant",
+    "elevator",
+    "elite",
+    "else",
+    "embark",
+    "embody",
+    "embrace",
+    "emerge",
+    "emotion",
+    "employ",
+    "empower",
+    "empty",
+    "enable",
+    "enact",
+    "end",
+    "endless",
+    "endorse",
+    "enemy",
+    "energy",
+    "enforce",
+    "engage",
+    "engine",
+    "enhance",
+    "enjoy",
+    "enlist",
+    "enough",
+    "enrich",
+    "enroll",
+    "ensure",
+    "enter",
+    "entire",
+    "entry",
+    "envelope",
+    "episode",
+    "equal",
+    "equip",
+    "era",
+    "erase",
+    "erode",
+    "erosion",
+    "error",
+    "erupt",
+    "escape",
+    "essay",
+    "essence",
+    "estate",
+    "eternal",
+    "ethics",
+    "evidence",
+    "evil",
+    "evoke",
+    "evolve",
+    "exact",
+    "example",
+    "excess",
+    "exchange",
+    "excite",
+    "exclude",
+    "excuse",
+    "execute",
+    "exercise",
+    "exhaust",
+    "exhibit",
+    "exile",
+    "exist",
+    "exit",
+    "exotic",
+    "expand",
+    "expect",
+    "expire",
+    "explain",
+    "expose",
+    "express",
+    "extend",
+    "extra",
+    "eye",
+    "eyebrow",
+    "fabric",
+    "face",
+    "faculty",
+    "fade",
+    "faint",
+    "faith",
+    "fall",
+    "false",
+    "fame",
+    "family",
+    "famous",
+    "fan",
+    "fancy",
+    "fantasy",
+    "farm",
+    "fashion",
+    "fat",
+    "fatal",
+    "father",
+    "fatigue",
+    "fault",
+    "favorite",
+    "feature",
+    "february",
+    "federal",
+    "fee",
+    "feed",
+    "feel",
+    "female",
+    "fence",
+    "festival",
+    "fetch",
+    "fever",
+    "few",
+    "fiber",
+    "fiction",
+    "field",
+    "figure",
+    "file",
+    "film",
+    "filter",
+    "final",
+    "find",
+    "fine",
+    "finger",
+    "finish",
+    "fire",
+    "firm",
+    "first",
+    "fiscal",
+    "fish",
+    "fit",
+    "fitness",
+    "fix",
+    "flag",
+    "flame",
+    "flash",
+    "flat",
+    "flavor",
+    "flee",
+    "flight",
+    "flip",
+    "float",
+    "flock",
+    "floor",
+    "flower",
+    "fluid",
+    "flush",
+    "fly",
+    "foam",
+    "focus",
+    "fog",
+    "foil",
+    "fold",
+    "follow",
+    "food",
+    "foot",
+    "force",
+    "forest",
+    "forget",
+    "fork",
+    "fortune",
+    "forum",
+    "forward",
+    "fossil",
+    "foster",
+    "found",
+    "fox",
+    "fragile",
+    "frame",
+    "frequent",
+    "fresh",
+    "friend",
+    "fringe",
+    "frog",
+    "front",
+    "frost",
+    "frown",
+    "frozen",
+    "fruit",
+    "fuel",
+    "fun",
+    "funny",
+    "furnace",
+    "fury",
+    "future",
+    "gadget",
+    "gain",
+    "galaxy",
+    "gallery",
+    "game",
+    "gap",
+    "garage",
+    "garbage",
+    "garden",
+    "garlic",
+    "garment",
+    "gas",
+    "gasp",
+    "gate",
+    "gather",
+    "gauge",
+    "gaze",
+    "general",
+    "genius",
+    "genre",
+    "gentle",
+    "genuine",
+    "gesture",
+    "ghost",
+    "giant",
+    "gift",
+    "giggle",
+    "ginger",
+    "giraffe",
+    "girl",
+    "give",
+    "glad",
+    "glance",
+    "glare",
+    "glass",
+    "glide",
+    "glimpse",
+    "globe",
+    "gloom",
+    "glory",
+    "glove",
+    "glow",
+    "glue",
+    "goat",
+    "goddess",
+    "gold",
+    "good",
+    "goose",
+    "gorilla",
+    "gospel",
+    "gossip",
+    "govern",
+    "gown",
+    "grab",
+    "grace",
+    "grain",
+    "grant",
+    "grape",
+    "grass",
+    "gravity",
+    "great",
+    "green",
+    "grid",
+    "grief",
+    "grit",
+    "grocery",
+    "group",
+    "grow",
+    "grunt",
+    "guard",
+    "guess",
+    "guide",
+    "guilt",
+    "guitar",
+    "gun",
+    "gym",
+    "habit",
+    "hair",
+    "half",
+    "hammer",
+    "hamster",
+    "hand",
+    "happy",
+    "harbor",
+    "hard",
+    "harsh",
+    "harvest",
+    "hat",
+    "have",
+    "hawk",
+    "hazard",
+    "head",
+    "health",
+    "heart",
+    "heavy",
+    "hedgehog",
+    "height",
+    "hello",
+    "helmet",
+    "help",
+    "hen",
+    "hero",
+    "hidden",
+    "high",
+    "hill",
+    "hint",
+    "hip",
+    "hire",
+    "history",
+    "hobby",
+    "hockey",
+    "hold",
+    "hole",
+    "holiday",
+    "hollow",
+    "home",
+    "honey",
+    "hood",
+    "hope",
+    "horn",
+    "horror",
+    "horse",
+    "hospital",
+    "host",
+    "hotel",
+    "hour",
+    "hover",
+    "hub",
+    "huge",
+    "human",
+    "humble",
+    "humor",
+    "hundred",
+    "hungry",
+    "hunt",
+    "hurdle",
+    "hurry",
+    "hurt",
+    "husband",
+    "hybrid",
+    "ice",
+    "icon",
+    "idea",
+    "identify",
+    "idle",
+    "ignore",
+    "ill",
+    "illegal",
+    "illness",
+    "image",
+    "imitate",
+    "immense",
+    "immune",
+    "impact",
+    "impose",
+    "improve",
+    "impulse",
+    "inch",
+    "include",
+    "income",
+    "increase",
+    "index",
+    "indicate",
+    "indoor",
+    "industry",
+    "infant",
+    "inflict",
+    "inform",
+    "inhale",
+    "inherit",
+    "initial",
+    "inject",
+    "injury",
+    "inmate",
+    "inner",
+    "innocent",
+    "input",
+    "inquiry",
+    "insane",
+    "insect",
+    "inside",
+    "inspire",
+    "install",
+    "intact",
+    "interest",
+    "into",
+    "invest",
+    "invite",
+    "involve",
+    "iron",
+    "island",
+    "isolate",
+    "issue",
+    "item",
+    "ivory",
+    "jacket",
+    "jaguar",
+    "jar",
+    "jazz",
+    "jealous",
+    "jeans",
+    "jelly",
+    "jewel",
+    "job",
+    "join",
+    "joke",
+    "journey",
+    "joy",
+    "judge",
+    "juice",
+    "jump",
+    "jungle",
+    "junior",
+    "junk",
+    "just",
+    "kangaroo",
+    "keen",
+    "keep",
+    "ketchup",
+    "key",
+    "kick",
+    "kid",
+    "kidney",
+    "kind",
+    "kingdom",
+    "kiss",
+    "kit",
+    "kitchen",
+    "kite",
+    "kitten",
+    "kiwi",
+    "knee",
+    "knife",
+    "knock",
+    "know",
+    "lab",
+    "label",
+    "labor",
+    "ladder",
+    "lady",
+    "lake",
+    "lamp",
+    "language",
+    "laptop",
+    "large",
+    "later",
+    "latin",
+    "laugh",
+    "laundry",
+    "lava",
+    "law",
+    "lawn",
+    "lawsuit",
+    "layer",
+    "lazy",
+    "leader",
+    "leaf",
+    "learn",
+    "leave",
+    "lecture",
+    "left",
+    "leg",
+    "legal",
+    "legend",
+    "leisure",
+    "lemon",
+    "lend",
+    "length",
+    "lens",
+    "leopard",
+    "lesson",
+    "letter",
+    "level",
+    "liar",
+    "liberty",
+    "library",
+    "license",
+    "life",
+    "lift",
+    "light",
+    "like",
+    "limb",
+    "limit",
+    "link",
+    "lion",
+    "liquid",
+    "list",
+    "little",
+    "live",
+    "lizard",
+    "load",
+    "loan",
+    "lobster",
+    "local",
+    "lock",
+    "logic",
+    "lonely",
+    "long",
+    "loop",
+    "lottery",
+    "loud",
+    "lounge",
+    "love",
+    "loyal",
+    "lucky",
+    "luggage",
+    "lumber",
+    "lunar",
+    "lunch",
+    "luxury",
+    "lyrics",
+    "machine",
+    "mad",
+    "magic",
+    "magnet",
+    "maid",
+    "mail",
+    "main",
+    "major",
+    "make",
+    "mammal",
+    "man",
+    "manage",
+    "mandate",
+    "mango",
+    "mansion",
+    "manual",
+    "maple",
+    "marble",
+    "march",
+    "margin",
+    "marine",
+    "market",
+    "marriage",
+    "mask",
+    "mass",
+    "master",
+    "match",
+    "material",
+    "math",
+    "matrix",
+    "matter",
+    "maximum",
+    "maze",
+    "meadow",
+    "mean",
+    "measure",
+    "meat",
+    "mechanic",
+    "medal",
+    "media",
+    "melody",
+    "melt",
+    "member",
+    "memory",
+    "mention",
+    "menu",
+    "mercy",
+    "merge",
+    "merit",
+    "merry",
+    "mesh",
+    "message",
+    "metal",
+    "method",
+    "middle",
+    "midnight",
+    "milk",
+    "million",
+    "mimic",
+    "mind",
+    "minimum",
+    "minor",
+    "minute",
+    "miracle",
+    "mirror",
+    "misery",
+    "miss",
+    "mistake",
+    "mix",
+    "mixed",
+    "mixture",
+    "mobile",
+    "model",
+    "modify",
+    "mom",
+    "moment",
+    "monitor",
+    "monkey",
+    "monster",
+    "month",
+    "moon",
+    "moral",
+    "more",
+    "morning",
+    "mosquito",
+    "mother",
+    "motion",
+    "motor",
+    "mountain",
+    "mouse",
+    "move",
+    "movie",
+    "much",
+    "muffin",
+    "mule",
+    "multiply",
+    "muscle",
+    "museum",
+    "mushroom",
+    "music",
+    "must",
+    "mutual",
+    "myself",
+    "mystery",
+    "myth",
+    "naive",
+    "name",
+    "napkin",
+    "narrow",
+    "nasty",
+    "nation",
+    "nature",
+    "near",
+    "neck",
+    "need",
+    "negative",
+    "neglect",
+    "neither",
+    "nephew",
+    "nerve",
+    "nest",
+    "net",
+    "network",
+    "neutral",
+    "never",
+    "news",
+    "next",
+    "nice",
+    "night",
+    "noble",
+    "noise",
+    "nominee",
+    "noodle",
+    "normal",
+    "north",
+    "nose",
+    "notable",
+    "note",
+    "nothing",
+    "notice",
+    "novel",
+    "now",
+    "nuclear",
+    "number",
+    "nurse",
+    "nut",
+    "oak",
+    "obey",
+    "object",
+    "oblige",
+    "obscure",
+    "observe",
+    "obtain",
+    "obvious",
+    "occur",
+    "ocean",
+    "october",
+    "odor",
+    "off",
+    "offer",
+    "office",
+    "often",
+    "oil",
+    "okay",
+    "old",
+    "olive",
+    "olympic",
+    "omit",
+    "once",
+    "one",
+    "onion",
+    "online",
+    "only",
+    "open",
+    "opera",
+    "opinion",
+    "oppose",
+    "option",
+    "orange",
+    "orbit",
+    "orchard",
+    "order",
+    "ordinary",
+    "organ",
+    "orient",
+    "original",
+    "orphan",
+    "ostrich",
+    "other",
+    "outdoor",
+    "outer",
+    "output",
+    "outside",
+    "oval",
+    "oven",
+    "over",
+    "own",
+    "owner",
+    "oxygen",
+    "oyster",
+    "ozone",
+    "pact",
+    "paddle",
+    "page",
+    "pair",
+    "palace",
+    "palm",
+    "panda",
+    "panel",
+    "panic",
+    "panther",
+    "paper",
+    "parade",
+    "parent",
+    "park",
+    "parrot",
+    "party",
+    "pass",
+    "patch",
+    "path",
+    "patient",
+    "patrol",
+    "pattern",
+    "pause",
+    "pave",
+    "payment",
+    "peace",
+    "peanut",
+    "pear",
+    "peasant",
+    "pelican",
+    "pen",
+    "penalty",
+    "pencil",
+    "people",
+    "pepper",
+    "perfect",
+    "permit",
+    "person",
+    "pet",
+    "phone",
+    "photo",
+    "phrase",
+    "physical",
+    "piano",
+    "picnic",
+    "picture",
+    "piece",
+    "pig",
+    "pigeon",
+    "pill",
+    "pilot",
+    "pink",
+    "pioneer",
+    "pipe",
+    "pistol",
+    "pitch",
+    "pizza",
+    "place",
+    "planet",
+    "plastic",
+    "plate",
+    "play",
+    "please",
+    "pledge",
+    "pluck",
+    "plug",
+    "plunge",
+    "poem",
+    "poet",
+    "point",
+    "polar",
+    "pole",
+    "police",
+    "pond",
+    "pony",
+    "pool",
+    "popular",
+    "portion",
+    "position",
+    "possible",
+    "post",
+    "potato",
+    "pottery",
+    "poverty",
+    "powder",
+    "power",
+    "practice",
+    "praise",
+    "predict",
+    "prefer",
+    "prepare",
+    "present",
+    "pretty",
+    "prevent",
+    "price",
+    "pride",
+    "primary",
+    "print",
+    "priority",
+    "prison",
+    "private",
+    "prize",
+    "problem",
+    "process",
+    "produce",
+    "profit",
+    "program",
+    "project",
+    "promote",
+    "proof",
+    "property",
+    "prosper",
+    "protect",
+    "proud",
+    "provide",
+    "public",
+    "pudding",
+    "pull",
+    "pulp",
+    "pulse",
+    "pumpkin",
+    "punch",
+    "pupil",
+    "puppy",
+    "purchase",
+    "purity",
+    "purpose",
+    "purse",
+    "push",
+    "put",
+    "puzzle",
+    "pyramid",
+    "quality",
+    "quantum",
+    "quarter",
+    "question",
+    "quick",
+    "quit",
+    "quiz",
+    "quote",
+    "rabbit",
+    "raccoon",
+    "race",
+    "rack",
+    "radar",
+    "radio",
+    "rail",
+    "rain",
+    "raise",
+    "rally",
+    "ramp",
+    "ranch",
+    "random",
+    "range",
+    "rapid",
+    "rare",
+    "rate",
+    "rather",
+    "raven",
+    "raw",
+    "razor",
+    "ready",
+    "real",
+    "reason",
+    "rebel",
+    "rebuild",
+    "recall",
+    "receive",
+    "recipe",
+    "record",
+    "recycle",
+    "reduce",
+    "reflect",
+    "reform",
+    "refuse",
+    "region",
+    "regret",
+    "regular",
+    "reject",
+    "relax",
+    "release",
+    "relief",
+    "rely",
+    "remain",
+    "remember",
+    "remind",
+    "remove",
+    "render",
+    "renew",
+    "rent",
+    "reopen",
+    "repair",
+    "repeat",
+    "replace",
+    "report",
+    "require",
+    "rescue",
+    "resemble",
+    "resist",
+    "resource",
+    "response",
+    "result",
+    "retire",
+    "retreat",
+    "return",
+    "reunion",
+    "reveal",
+    "review",
+    "reward",
+    "rhythm",
+    "rib",
+    "ribbon",
+    "rice",
+    "rich",
+    "ride",
+    "ridge",
+    "rifle",
+    "right",
+    "rigid",
+    "ring",
+    "riot",
+    "ripple",
+    "risk",
+    "ritual",
+    "rival",
+    "river",
+    "road",
+    "roast",
+    "robot",
+    "robust",
+    "rocket",
+    "romance",
+    "roof",
+    "rookie",
+    "room",
+    "rose",
+    "rotate",
+    "rough",
+    "round",
+    "route",
+    "royal",
+    "rubber",
+    "rude",
+    "rug",
+    "rule",
+    "run",
+    "runway",
+    "rural",
+    "sad",
+    "saddle",
+    "sadness",
+    "safe",
+    "sail",
+    "salad",
+    "salmon",
+    "salon",
+    "salt",
+    "salute",
+    "same",
+    "sample",
+    "sand",
+    "satisfy",
+    "satoshi",
+    "sauce",
+    "sausage",
+    "save",
+    "say",
+    "scale",
+    "scan",
+    "scare",
+    "scatter",
+    "scene",
+    "scheme",
+    "school",
+    "science",
+    "scissors",
+    "scorpion",
+    "scout",
+    "scrap",
+    "screen",
+    "script",
+    "scrub",
+    "sea",
+    "search",
+    "season",
+    "seat",
+    "second",
+    "secret",
+    "section",
+    "security",
+    "seed",
+    "seek",
+    "segment",
+    "select",
+    "sell",
+    "seminar",
+    "senior",
+    "sense",
+    "sentence",
+    "series",
+    "service",
+    "session",
+    "settle",
+    "setup",
+    "seven",
+    "shadow",
+    "shaft",
+    "shallow",
+    "share",
+    "shed",
+    "shell",
+    "sheriff",
+    "shield",
+    "shift",
+    "shine",
+    "ship",
+    "shiver",
+    "shock",
+    "shoe",
+    "shoot",
+    "shop",
+    "short",
+    "shoulder",
+    "shove",
+    "shrimp",
+    "shrug",
+    "shuffle",
+    "shy",
+    "sibling",
+    "sick",
+    "side",
+    "siege",
+    "sight",
+    "sign",
+    "silent",
+    "silk",
+    "silly",
+    "silver",
+    "similar",
+    "simple",
+    "since",
+    "sing",
+    "siren",
+    "sister",
+    "situate",
+    "six",
+    "size",
+    "skate",
+    "sketch",
+    "ski",
+    "skill",
+    "skin",
+    "skirt",
+    "skull",
+    "slab",
+    "slam",
+    "sleep",
+    "slender",
+    "slice",
+    "slide",
+    "slight",
+    "slim",
+    "slogan",
+    "slot",
+    "slow",
+    "slush",
+    "small",
+    "smart",
+    "smile",
+    "smoke",
+    "smooth",
+    "snack",
+    "snake",
+    "snap",
+    "sniff",
+    "snow",
+    "soap",
+    "soccer",
+    "social",
+    "sock",
+    "soda",
+    "soft",
+    "solar",
+    "soldier",
+    "solid",
+    "solution",
+    "solve",
+    "someone",
+    "song",
+    "soon",
+    "sorry",
+    "sort",
+    "soul",
+    "sound",
+    "soup",
+    "source",
+    "south",
+    "space",
+    "spare",
+    "spatial",
+    "spawn",
+    "speak",
+    "special",
+    "speed",
+    "spell",
+    "spend",
+    "sphere",
+    "spice",
+    "spider",
+    "spike",
+    "spin",
+    "spirit",
+    "split",
+    "spoil",
+    "sponsor",
+    "spoon",
+    "sport",
+    "spot",
+    "spray",
+    "spread",
+    "spring",
+    "spy",
+    "square",
+    "squeeze",
+    "squirrel",
+    "stable",
+    "stadium",
+    "staff",
+    "stage",
+    "stairs",
+    "stamp",
+    "stand",
+    "start",
+    "state",
+    "stay",
+    "steak",
+    "steel",
+    "stem",
+    "step",
+    "stereo",
+    "stick",
+    "still",
+    "sting",
+    "stock",
+    "stomach",
+    "stone",
+    "stool",
+    "story",
+    "stove",
+    "strategy",
+    "street",
+    "strike",
+    "strong",
+    "struggle",
+    "student",
+    "stuff",
+    "stumble",
+    "style",
+    "subject",
+    "submit",
+    "subway",
+    "success",
+    "such",
+    "sudden",
+    "suffer",
+    "sugar",
+    "suggest",
+    "suit",
+    "summer",
+    "sun",
+    "sunny",
+    "sunset",
+    "super",
+    "supply",
+    "supreme",
+    "sure",
+    "surface",
+    "surge",
+    "surprise",
+    "surround",
+    "survey",
+    "suspect",
+    "sustain",
+    "swallow",
+    "swamp",
+    "swap",
+    "swarm",
+    "swear",
+    "sweet",
+    "swift",
+    "swim",
+    "swing",
+    "switch",
+    "sword",
+    "symbol",
+    "symptom",
+    "syrup",
+    "system",
+    "table",
+    "tackle",
+    "tag",
+    "tail",
+    "talent",
+    "talk",
+    "tank",
+    "tape",
+    "target",
+    "task",
+    "taste",
+    "tattoo",
+    "taxi",
+    "teach",
+    "team",
+    "tell",
+    "ten",
+    "tenant",
+    "tennis",
+    "tent",
+    "term",
+    "test",
+    "text",
+    "thank",
+    "that",
+    "theme",
+    "then",
+    "theory",
+    "there",
+    "they",
+    "thing",
+    "this",
+    "thought",
+    "three",
+    "thrive",
+    "throw",
+    "thumb",
+    "thunder",
+    "ticket",
+    "tide",
+    "tiger",
+    "tilt",
+    "timber",
+    "time",
+    "tiny",
+    "tip",
+    "tired",
+    "tissue",
+    "title",
+    "toast",
+    "tobacco",
+    "today",
+    "toddler",
+    "toe",
+    "together",
+    "toilet",
+    "token",
+    "tomato",
+    "tomorrow",
+    "tone",
+    "tongue",
+    "tonight",
+    "tool",
+    "tooth",
+    "top",
+    "topic",
+    "topple",
+    "torch",
+    "tornado",
+    "tortoise",
+    "toss",
+    "total",
+    "tourist",
+    "toward",
+    "tower",
+    "town",
+    "toy",
+    "track",
+    "trade",
+    "traffic",
+    "tragic",
+    "train",
+    "transfer",
+    "trap",
+    "trash",
+    "travel",
+    "tray",
+    "treat",
+    "tree",
+    "trend",
+    "trial",
+    "tribe",
+    "trick",
+    "trigger",
+    "trim",
+    "trip",
+    "trophy",
+    "trouble",
+    "truck",
+    "true",
+    "truly",
+    "trumpet",
+    "trust",
+    "truth",
+    "try",
+    "tube",
+    "tuition",
+    "tumble",
+    "tuna",
+    "tunnel",
+    "turkey",
+    "turn",
+    "turtle",
+    "twelve",
+    "twenty",
+    "twice",
+    "twin",
+    "twist",
+    "two",
+    "type",
+    "typical",
+    "ugly",
+    "umbrella",
+    "unable",
+    "unaware",
+    "uncle",
+    "uncover",
+    "under",
+    "undo",
+    "unfair",
+    "unfold",
+    "unhappy",
+    "uniform",
+    "unique",
+    "unit",
+    "universe",
+    "unknown",
+    "unlock",
+    "until",
+    "unusual",
+    "unveil",
+    "update",
+    "upgrade",
+    "uphold",
+    "upon",
+    "upper",
+    "upset",
+    "urban",
+    "urge",
+    "usage",
+    "use",
+    "used",
+    "useful",
+    "useless",
+    "usual",
+    "utility",
+    "vacant",
+    "vacuum",
+    "vague",
+    "valid",
+    "valley",
+    "valve",
+    "van",
+    "vanish",
+    "vapor",
+    "various",
+    "vast",
+    "vault",
+    "vehicle",
+    "velvet",
+    "vendor",
+    "venture",
+    "venue",
+    "verb",
+    "verify",
+    "version",
+    "very",
+    "vessel",
+    "veteran",
+    "viable",
+    "vibrant",
+    "vicious",
+    "victory",
+    "video",
+    "view",
+    "village",
+    "vintage",
+    "violin",
+    "virtual",
+    "virus",
+    "visa",
+    "visit",
+    "visual",
+    "vital",
+    "vivid",
+    "vocal",
+    "voice",
+    "void",
+    "volcano",
+    "volume",
+    "vote",
+    "voyage",
+    "wage",
+    "wagon",
+    "wait",
+    "walk",
+    "wall",
+    "walnut",
+    "want",
+    "warfare",
+    "warm",
+    "warrior",
+    "wash",
+    "wasp",
+    "waste",
+    "water",
+    "wave",
+    "way",
+    "wealth",
+    "weapon",
+    "wear",
+    "weasel",
+    "weather",
+    "web",
+    "wedding",
+    "weekend",
+    "weird",
+    "welcome",
+    "west",
+    "wet",
+    "whale",
+    "what",
+    "wheat",
+    "wheel",
+    "when",
+    "where",
+    "whip",
+    "whisper",
+    "wide",
+    "width",
+    "wife",
+    "wild",
+    "will",
+    "win",
+    "window",
+    "wine",
+    "wing",
+    "wink",
+    "winner",
+    "winter",
+    "wire",
+    "wisdom",
+    "wise",
+    "wish",
+    "witness",
+    "wolf",
+    "woman",
+    "wonder",
+    "wood",
+    "wool",
+    "word",
+    "work",
+    "world",
+    "worry",
+    "worth",
+    "wrap",
+    "wreck",
+    "wrestle",
+    "wrist",
+    "write",
+    "wrong",
+    "yard",
+    "year",
+    "yellow",
+    "you",
+    "young",
+    "youth",
+    "zebra",
+    "zero",
+    "zone",
+    "zoo"
+];
+const BIP39_INDEX = (() => { const m = Object.create(null); for (let i = 0; i < BIP39_WORDS.length; i++) m[BIP39_WORDS[i]] = i; return m; })();
+</script>
+
+<!--
+================================================================================
+PURE-JS CRYPTO
+
+Why these aren't `crypto.subtle`: the spec mandates the algorithms (SHA-256,
+PBKDF2-HMAC-SHA512), not the API. `crypto.subtle` availability on `file://`
+is browser- and version-dependent (notably older iOS Safari and old Android
+WebViews); a silent `undefined` would break key derivation with no clear
+diagnostic. Implementing in plain JS also keeps the entire cryptographic
+pipeline visible to an auditor reading only this file — no opaque browser
+crypto in the path from mnemonic to signature.
+
+Verified against Node `crypto`'s SHA-256, HMAC-SHA512, and PBKDF2-HMAC-SHA512
+on standard test vectors (including the BIP39 "abandon..art" canonical seed)
+before being inlined here.
+================================================================================
+-->
+<script>
+'use strict';
+
+// ---------------------------------------------------------------------------
+// SHA-256 (FIPS 180-4). Returns Uint8Array(32).
+// ---------------------------------------------------------------------------
+function sha256(bytes) {
+  const K = new Uint32Array([
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2,
+  ]);
+  const H = new Uint32Array([
+    0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,
+    0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19,
+  ]);
+  const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+
+  const len = bytes.length;
+  // Pad: append 0x80, then zeros until length ≡ 56 mod 64, then 64-bit BE bit length.
+  const padBytes = (len % 64 < 56) ? (56 - (len % 64)) : (120 - (len % 64));
+  const total = len + padBytes + 8;
+  const padded = new Uint8Array(total);
+  padded.set(bytes);
+  padded[len] = 0x80;
+  const dv = new DataView(padded.buffer);
+  // 64-bit BE bit length, split because JS bitwise ops are 32-bit.
+  const bitLenLo = (len * 8) >>> 0;
+  const bitLenHi = Math.floor(len / 0x20000000) >>> 0; // len*8 / 2^32 == len / 2^29
+  dv.setUint32(total - 8, bitLenHi, false);
+  dv.setUint32(total - 4, bitLenLo, false);
+
+  const W = new Uint32Array(64);
+  for (let off = 0; off < total; off += 64) {
+    for (let t = 0; t < 16; t++) W[t] = dv.getUint32(off + t * 4, false);
+    for (let t = 16; t < 64; t++) {
+      const s0 = rotr(W[t-15], 7) ^ rotr(W[t-15], 18) ^ (W[t-15] >>> 3);
+      const s1 = rotr(W[t-2], 17) ^ rotr(W[t-2], 19) ^ (W[t-2] >>> 10);
+      W[t] = (W[t-16] + s0 + W[t-7] + s1) >>> 0;
+    }
+    let a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+    for (let t = 0; t < 64; t++) {
+      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+      const ch = (e & f) ^ (~e & g);
+      const T1 = (h + S1 + ch + K[t] + W[t]) >>> 0;
+      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const mj = (a & b) ^ (a & c) ^ (b & c);
+      const T2 = (S0 + mj) >>> 0;
+      h = g; g = f; f = e;
+      e = (d + T1) >>> 0;
+      d = c; c = b; b = a;
+      a = (T1 + T2) >>> 0;
+    }
+    H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0;
+    H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
+    H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0;
+    H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+  }
+  const out = new Uint8Array(32);
+  const odv = new DataView(out.buffer);
+  for (let i = 0; i < 8; i++) odv.setUint32(i * 4, H[i], false);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// HMAC-SHA512 — built on tweetnacl's `nacl.hash` (SHA-512). Block size 128.
+// ---------------------------------------------------------------------------
+function hmacSha512(key, msg) {
+  const B = 128;
+  let k = key;
+  if (k.length > B) k = nacl.hash(k);
+  if (k.length < B) {
+    const padded = new Uint8Array(B);
+    padded.set(k);
+    k = padded;
+  }
+  const opad = new Uint8Array(B);
+  const ipad = new Uint8Array(B);
+  for (let n = 0; n < B; n++) { opad[n] = k[n] ^ 0x5c; ipad[n] = k[n] ^ 0x36; }
+  const inner = new Uint8Array(B + msg.length);
+  inner.set(ipad); inner.set(msg, B);
+  const innerHash = nacl.hash(inner);
+  const outer = new Uint8Array(B + 64);
+  outer.set(opad); outer.set(innerHash, B);
+  return nacl.hash(outer);
+}
+
+// ---------------------------------------------------------------------------
+// PBKDF2-HMAC-SHA512 (RFC 2898). Synchronous; 2048 iters at 64-byte dkLen
+// runs in roughly 100–500 ms on a phone. The single caller (`bip39Seed`)
+// yields to the event loop once before invoking, so any "Deriving…" UI
+// state can paint before this blocks.
+// ---------------------------------------------------------------------------
+function pbkdf2HmacSha512(password, salt, iters, dkLen) {
+  const hLen = 64;
+  const blocks = Math.ceil(dkLen / hLen);
+  const out = new Uint8Array(blocks * hLen);
+  const block = new Uint8Array(salt.length + 4);
+  block.set(salt);
+  for (let i = 1; i <= blocks; i++) {
+    block[salt.length + 0] = (i >>> 24) & 0xff;
+    block[salt.length + 1] = (i >>> 16) & 0xff;
+    block[salt.length + 2] = (i >>>  8) & 0xff;
+    block[salt.length + 3] =  i         & 0xff;
+    let U = hmacSha512(password, block);
+    const T = new Uint8Array(U); // copy
+    for (let j = 1; j < iters; j++) {
+      U = hmacSha512(password, U);
+      for (let k = 0; k < hLen; k++) T[k] ^= U[k];
+    }
+    out.set(T, (i - 1) * hLen);
+  }
+  return out.subarray(0, dkLen);
+}
+</script>
+
+<!--
+================================================================================
+APPLICATION LOGIC
+================================================================================
+
+Cryptographic pipeline, end to end:
+
+  1. User enters 24 BIP39 words. Each word is looked up in BIP39_WORDS to get
+     its 0..2047 index (11 bits per word, total 24 * 11 = 264 bits).
+  2. The first 256 of those bits are the entropy (ENT). The last 8 bits are
+     the BIP39 checksum: ENT_CS = first 8 bits of SHA-256(ENT). If the user's
+     last word does not match this checksum byte, we abort with an error —
+     we do NOT silently derive a different key from a "close" mnemonic.
+  3. The mnemonic string (lowercase, NFKD-normalized, single-space-joined) is
+     stretched with PBKDF2-HMAC-SHA512, 2048 iterations, salt = "mnemonic" +
+     the passphrase typed on Screen 1, which may be blank and is blank for
+     the documented test vectors, output length 64 bytes. This is the standard
+     BIP39 seed. PBKDF2/HMAC/SHA-256 are implemented in pure JS (see the
+     PURE-JS CRYPTO block above) rather than via `crypto.subtle`, so the page
+     works even on browsers that don't expose SubtleCrypto on `file://`.
+  4. We take the FIRST 32 BYTES of that 64-byte seed as the Ed25519 seed and
+     hand it to nacl.sign.keyPair.fromSeed(), which deterministically produces
+     a 32-byte public key and a 64-byte secret key.
+
+  Why this derivation is intentionally non-standard (NOT SLIP-0010 / BIP32):
+    - This is not a crypto wallet. The BIP39 mnemonic is used purely as a
+      human-friendly encoding for 256 bits of entropy — nothing more.
+    - Compatibility with Ledger / Solana / SLIP-0010 is a non-goal. Sharing a
+      seed between a crypto wallet and a document-signing tool would be a
+      security anti-pattern; users should generate a fresh mnemonic for this
+      tool.
+    - The verifier uses the exported public key, not a derivation path. There
+      is no second tool that needs to reproduce the same key from the same
+      mnemonic, so hierarchical derivation buys nothing here.
+    - The primary goal of this tool is minimal code size and auditability.
+      SLIP-0010/BIP32 would add significant complexity for zero practical
+      benefit.
+    - This rationale is reproduced verbatim from the spec so a future auditor
+      reading only this file understands the choice was deliberate.
+
+  5. Signing: SSHSIG (OpenSSH PROTOCOL.sshsig). Ed25519 never signs the
+     message directly; it signs the blob
+       "SSHSIG" || string(namespace) || string("") || string("sha512")
+                || string(SHA-512(msgUtf8))
+     with nacl.sign.detached. The 64-byte signature is then packed into the
+     outer SSHSIG structure together with the public key and armored as a
+     "-----BEGIN SSH SIGNATURE-----" PEM block. That block is the QR payload
+     and is exactly what `ssh-keygen -Y sign -n <namespace>` would have
+     produced, so `ssh-keygen -Y verify -n <namespace>` checks it with no
+     custom tooling. The namespace is a field on the page, "file" by
+     default; git checks commit signatures under "git" and nothing else.
+  6. The public-key QR is the OpenSSH public-key line
+     ("ssh-ed25519 AAAA..."), so the verifier can paste it into an
+     allowed_signers file as-is.
+
+================================================================================
+-->
+<script>
+'use strict';
+
+// ---------------------------------------------------------------------------
+// Encoding helpers
+// ---------------------------------------------------------------------------
+
+function bytesToHex(u8) {
+  let s = '';
+  for (let i = 0; i < u8.length; i++) s += u8[i].toString(16).padStart(2, '0');
+  return s;
+}
+
+// Standard base64 (with + / and =) — what OpenSSH uses for key lines and SSHSIG armor.
+function bytesToBase64(u8) {
+  let bin = '';
+  for (let i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]);
+  return btoa(bin);
+}
+
+function utf8(s) { return new TextEncoder().encode(s); }
+
+// ---------------------------------------------------------------------------
+// SSH wire format (RFC 4251 §5) — the two primitives SSHSIG is built from.
+// ---------------------------------------------------------------------------
+
+function concatBytes(...parts) {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let off = 0;
+  for (const p of parts) { out.set(p, off); off += p.length; }
+  return out;
+}
+
+// string: uint32 big-endian length, then the bytes.
+function sshString(bytes) {
+  const len = new Uint8Array(4);
+  new DataView(len.buffer).setUint32(0, bytes.length);
+  return concatBytes(len, bytes);
+}
+
+// OpenSSH public-key blob: string "ssh-ed25519" || string pub(32).
+function sshPubBlob(pub) {
+  return concatBytes(sshString(utf8('ssh-ed25519')), sshString(pub));
+}
+
+// OpenSSH public-key line, as found in authorized_keys / allowed_signers.
+function sshPubLine(pub) {
+  return 'ssh-ed25519 ' + bytesToBase64(sshPubBlob(pub));
+}
+
+// OpenSSH fingerprint: "SHA256:" + unpadded base64 of SHA-256 over the wire
+// blob (not the raw 32 key bytes). Why this and not our own short hex: the
+// verifier sees this exact string from `ssh-keygen -lf` and in the
+// `-Y verify` success line, so one key must show one identity everywhere.
+function sshFingerprint(pub) {
+  return 'SHA256:' + bytesToBase64(sha256(sshPubBlob(pub))).replace(/=+$/, '');
+}
+
+const SSHSIG_MAGIC = utf8('SSHSIG');
+
+// SSHSIG signature over `msgBytes` under `namespace` (OpenSSH
+// PROTOCOL.sshsig). Returns the armored PEM block. Ed25519 signs a
+// fixed-size blob holding the SHA-512 of the message, so the output size
+// does not depend on the message length.
+// Why the namespace is a parameter: it is inside the signed bytes, and the
+// verifier names it — `ssh-keygen -Y verify -n file`, and git's own check
+// of a commit signature, which uses "git" and cannot be told otherwise.
+function sshsigSign(msgBytes, secretKey, pub, namespace) {
+  const ns = sshString(utf8(namespace));
+  const reserved = sshString(new Uint8Array(0));
+  const hashAlg = sshString(utf8('sha512'));
+  const signedData = concatBytes(SSHSIG_MAGIC, ns, reserved, hashAlg,
+                                 sshString(nacl.hash(msgBytes)));
+  const sig = nacl.sign.detached(signedData, secretKey);
+  const sigBlob = concatBytes(sshString(utf8('ssh-ed25519')), sshString(sig));
+  const version = new Uint8Array([0, 0, 0, 1]);
+  const blob = concatBytes(SSHSIG_MAGIC, version, sshString(sshPubBlob(pub)),
+                           ns, reserved, hashAlg, sshString(sigBlob));
+  // ssh-keygen wraps the base64 at 70 columns; match it byte-for-byte.
+  const b64 = bytesToBase64(blob).replace(/.{70}/g, '$&\n');
+  return '-----BEGIN SSH SIGNATURE-----\n' + b64 +
+         (b64.endsWith('\n') ? '' : '\n') + '-----END SSH SIGNATURE-----\n';
+}
+
+// `sha256` is defined in the PURE-JS CRYPTO block above; it returns a
+// Uint8Array(32) synchronously. Call sites still write `await sha256(...)`
+// for diff minimality — `await` on a non-promise just returns the value.
+
+// ---------------------------------------------------------------------------
+// BIP39 mnemonic validation (24 words, with checksum)
+// ---------------------------------------------------------------------------
+//
+// 24 words × 11 bits = 264 bits = 33 bytes = 32-byte entropy + 1 checksum byte.
+// Checksum byte = first 8 bits of SHA-256(entropy).
+//
+// Returns { ok: true, entropy: Uint8Array(32) } on success,
+// or       { ok: false, error: <string> } on any failure (unknown word,
+// wrong count, or bad checksum).
+
+// Caller invariant: `words` is exactly 24 entries (UI has 24 fixed inputs and
+// the empty-field check in deriveKey runs first). No length guard here.
+async function validateMnemonic24(words) {
+  // Build 264 bits of "indexBits" by concatenating each 11-bit index.
+  const bits = new Uint8Array(33); // 264 bits = 33 bytes
+  let bitPos = 0;
+  for (let i = 0; i < 24; i++) {
+    const w = words[i];
+    if (!(w in BIP39_INDEX)) {
+      return { ok: false, error: `word #${i + 1} ("${w}") is not in the BIP39 wordlist` };
+    }
+    const idx = BIP39_INDEX[w]; // 0..2047
+    // Write 11 bits of idx into `bits` at bitPos (MSB-first).
+    for (let b = 10; b >= 0; b--) {
+      const bit = (idx >> b) & 1;
+      const bytePos = bitPos >> 3;
+      const bitInByte = 7 - (bitPos & 7);
+      if (bit) bits[bytePos] |= (1 << bitInByte);
+      bitPos++;
+    }
+  }
+  const entropy = bits.slice(0, 32);
+  const checksumByte = bits[32]; // last 8 bits
+  const h = await sha256(entropy);
+  // Why: the BIP39 spec says checksum length = ENT/32; for ENT=256 that's 8 bits.
+  // So we compare the full first byte of SHA-256(entropy) to bits[32].
+  if (h[0] !== checksumByte) {
+    return { ok: false, error: 'checksum mismatch — last word does not match the BIP39 checksum of the previous 23 words' };
+  }
+  return { ok: true, entropy };
+}
+
+// ---------------------------------------------------------------------------
+// BIP39 seed derivation (PBKDF2-HMAC-SHA512, 2048 rounds, 64-byte output)
+// ---------------------------------------------------------------------------
+//
+// password = NFKD(mnemonic words joined by single space)
+// salt     = NFKD("mnemonic" + passphrase)        (passphrase may be empty)
+// iters    = 2048 ; output = 64 bytes ; hash = SHA-512
+//
+// Implemented via the pure-JS `pbkdf2HmacSha512` defined above (built on
+// tweetnacl's SHA-512). See the PURE-JS CRYPTO block for the rationale for
+// not using `crypto.subtle.deriveBits`. Async only so the caller can yield
+// to the event loop once before we burn ~100–500 ms blocking.
+
+async function bip39Seed(words, passphrase) {
+  const mnemonic = words.join(' ').normalize('NFKD');
+  const salt = ('mnemonic' + (passphrase || '')).normalize('NFKD');
+  // Yield once so any "Deriving…" UI updates in deriveKey() can paint
+  // before the synchronous PBKDF2 loop blocks the main thread.
+  await new Promise((r) => setTimeout(r, 0));
+  return pbkdf2HmacSha512(utf8(mnemonic), utf8(salt), 2048, 64);
+}
+
+// ---------------------------------------------------------------------------
+// Key state — held in module-scope closures, never written to the DOM.
+// ---------------------------------------------------------------------------
+
+let SECRET_KEY = null; // Uint8Array(64)  (Ed25519 expanded secret)
+let PUBLIC_KEY = null; // Uint8Array(32)
+let SEED32     = null; // Uint8Array(32)  (BIP39 seed first half; wiped immediately after fromSeed — see deriveKey)
+
+function zeroAll() {
+  // Best-effort wipe. The JS GC may have copied these buffers internally;
+  // we cannot guarantee no traces remain. Document this limitation honestly.
+  if (SECRET_KEY) SECRET_KEY.fill(0);
+  if (PUBLIC_KEY) PUBLIC_KEY.fill(0);
+  if (SEED32)     SEED32.fill(0);
+  SECRET_KEY = PUBLIC_KEY = SEED32 = null;
+}
+
+// ---------------------------------------------------------------------------
+// QR rendering — uses qrcode-generator's data URL output directly.
+// ---------------------------------------------------------------------------
+//
+// We use qrcode(typeNumber=0, ec='M') which auto-picks the smallest type for
+// the payload. Error-correction level M per spec.
+
+function renderQr(imgEl, payload) {
+  const q = qrcode(0, 'M');
+  q.addData(payload);
+  q.make();
+  // cellSize 4px. The margin argument is pixels, not modules, so 16px is
+  // the 4-module quiet zone the QR standard asks for: about 180px for the
+  // public-key line (type 5) and about 308px for the signature block
+  // (type 13). Before this the margin was 4px, under one module.
+  // Why 4px and not 5px: with the quiet zone, 5px makes the signature QR
+  // 385px, wider than the 319px a 375px phone leaves after the page and
+  // box padding, and a CSS downscale would break the integer module size
+  // that image-rendering: pixelated relies on.
+  imgEl.src = q.createDataURL(4, 16);
+}
+
+// ---------------------------------------------------------------------------
+// UI: Screen 1 — seed entry
+// ---------------------------------------------------------------------------
+
+const $ = (id) => document.getElementById(id);
+const wordsBox  = $('words');
+const seedErr   = $('seedErr');
+const screen1   = $('screen1');
+const screen2   = $('screen2');
+
+const wordInputs = [];
+for (let i = 0; i < 24; i++) {
+  const wrap = document.createElement('label');
+  wrap.className = 'word';
+  const n = document.createElement('span');
+  n.className = 'n';
+  n.textContent = (i + 1) + '.';
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.autocomplete = 'off';
+  inp.spellcheck = false;
+  inp.setAttribute('autocapitalize', 'none');
+  inp.setAttribute('autocorrect', 'off');
+  inp.dataset.idx = String(i);
+  inp.addEventListener('input', onWordInput);
+  inp.addEventListener('keydown', onWordKey);
+  inp.addEventListener('paste', onWordPaste);
+  wrap.appendChild(n);
+  wrap.appendChild(inp);
+  wordsBox.appendChild(wrap);
+  wordInputs.push(inp);
+}
+
+function onWordInput(e) {
+  const v = e.target.value.trim().toLowerCase();
+  e.target.value = v;
+  const wrap = e.target.parentNode;
+  if (!v) { wrap.classList.remove('bad', 'good'); return; }
+  if (v in BIP39_INDEX) { wrap.classList.add('good'); wrap.classList.remove('bad'); }
+  else                  { wrap.classList.add('bad');  wrap.classList.remove('good'); }
+}
+
+function onWordKey(e) {
+  // Space or Enter advances to the next field.
+  if (e.key === ' ' || e.key === 'Enter') {
+    e.preventDefault();
+    const i = Number(e.target.dataset.idx);
+    if (i < 23) wordInputs[i + 1].focus();
+    else if (e.key === 'Enter') deriveKey();
+  }
+}
+
+// Allow pasting a phrase into any field — split it across the 24 inputs.
+// If the pasted text already looks like a full 24-word phrase, treat it as
+// a full replace (route through fillWords) so any stale words from a prior
+// test vector get cleared. Otherwise just splice from the focused field.
+function onWordPaste(e) {
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  const parts = text.trim().toLowerCase().split(/\s+/);
+  if (parts.length >= 2) {
+    e.preventDefault();
+    if (parts.length >= 24) { fillWords(text); return; }
+    const startIdx = Number(e.target.dataset.idx);
+    // A splice that runs past field 24 used to drop its last words in
+    // silence, the same way a paste of more than 24 words did. Refuse the
+    // whole paste instead: the fields keep what they held, and the message
+    // names how many words came and where they would have started.
+    if (startIdx + parts.length > 24) {
+      seedErr.textContent = 'these ' + parts.length + ' words do not fit from field ' + (startIdx + 1) + ': the phrase has only 24';
+      return;
+    }
+    seedErr.textContent = '';
+    for (let k = 0; k < parts.length; k++) {
+      wordInputs[startIdx + k].value = parts[k];
+      wordInputs[startIdx + k].dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+}
+
+$('pasteBtn').addEventListener('click', async () => {
+  const text = window.prompt('Paste your 24-word phrase:');
+  if (!text) return;
+  fillWords(text);
+});
+
+$('clearBtn').addEventListener('click', () => {
+  for (const inp of wordInputs) {
+    inp.value = '';
+    inp.parentNode.classList.remove('bad', 'good');
+  }
+  seedErr.textContent = '';
+  wordInputs[0].focus();
+});
+
+// The 24 fields are the whole phrase, so the text filling them must hold
+// exactly 24 words. Checked here because this is the only place that turns a
+// whole pasted phrase into the fields: a longer paste used to lose its extra
+// words right here, in silence, and is refused instead.
+function fillWords(text) {
+  const parts = text.trim().toLowerCase().split(/\s+/);
+  if (parts.length !== 24) {
+    seedErr.textContent = 'the phrase must be exactly 24 words: this one has ' + parts.length;
+    return;
+  }
+  seedErr.textContent = '';
+  for (let i = 0; i < 24; i++) {
+    wordInputs[i].value = parts[i];
+    wordInputs[i].dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
+
+// Test vectors — kept in one place so the fill buttons, the self-test, and
+// the "is this a published test key?" check after Derive all share the same
+// source of truth. If a future change broke the derivation, the self-test
+// (and any user who clicked a test vector) catches it via pubHex compare.
+const TEST_VECTORS = [
+  { id: 'tv1', mnemonic: ('abandon '.repeat(23) + 'art').trim(),
+    pubHex: '1de352e44cd333672593f2334a730e180aaf290de89aa16d480de594e34e2961' },
+  { id: 'tv2', mnemonic: ('zoo '.repeat(23) + 'vote').trim(),
+    pubHex: 'ea1c7d41a6d70293194f45206ab4dca257d9c252fe2c53779fdef2a2bd05cd47' },
+  { id: 'tv3', mnemonic: 'letter advice cage absurd amount doctor acoustic avoid letter advice cage absurd amount doctor acoustic avoid letter advice cage absurd amount doctor acoustic bless',
+    pubHex: 'e88ff5f87c809d2921bf2ee8bd3a176d6fc66b9f90230920f1246b5472c22c13' },
+];
+
+// Self-test fixtures. The three primary vectors above are run at empty
+// passphrase (the canonical default and what the documented hex matches).
+// Why a fourth fixture (tv1 + 'PROPHET'): the empty-passphrase vectors alone
+// cannot prove that the `passphrase` argument is fed into the PBKDF2 salt at
+// all — a regression that hardcoded it back to '' would still pass. A fixed
+// expected pubkey at a non-empty passphrase additionally catches passphrase
+// mangling (truncation, lowercasing, double-NFKD). Mnemonic is reused from
+// tv1 so the only difference from the tv1 case is the passphrase argument.
+const SELF_TEST_VECTORS = [
+  ...TEST_VECTORS.map((v) => ({ ...v, passphrase: '' })),
+  { id: 'tv1+PROPHET', mnemonic: TEST_VECTORS[0].mnemonic, passphrase: 'PROPHET',
+    pubHex: '0abd856befd1aaaacfe339bd573dbbcb979d760926ca2e653b8b98e49faa35f9' },
+];
+// Why built from SELF_TEST_VECTORS, not TEST_VECTORS: the banner says "this
+// mnemonic is published. Anyone can sign with the same key." That is equally
+// true for tv1 + 'PROPHET' — both the mnemonic and the passphrase are in this
+// file and in the spec — so the banner has to fire for that key too.
+const TEST_VECTOR_PUBS = new Map(SELF_TEST_VECTORS.map((v) => [v.pubHex, v.id]));
+for (const v of TEST_VECTORS) {
+  $(v.id).addEventListener('click', () => {
+    fillWords(v.mnemonic);
+    // Why: documented test-vector pubkeys are at empty passphrase. A stale
+    // non-empty passphrase from a prior interaction would silently derive a
+    // different key. Mirrors the paste-clears-stale-words behavior.
+    $('passphrase').value = '';
+  });
+}
+
+// Self-test: derive each test vector through the page's actual pipeline and
+// compare the resulting pubkey to the documented hex. Catches regressions
+// in validateMnemonic24 / bip39Seed / fromSeed without needing a separate
+// reference implementation.
+$('selfTestBtn').addEventListener('click', async () => {
+  const result = $('selfTestResult');
+  result.className = 'muted';
+  result.textContent = 'running…';
+  const btn = $('selfTestBtn');
+  btn.disabled = true;
+  try {
+    const failures = [];
+    for (const v of SELF_TEST_VECTORS) {
+      const words = v.mnemonic.split(' ');
+      const valid = await validateMnemonic24(words);
+      if (!valid.ok) { failures.push(`${v.id}: ${valid.error}`); continue; }
+      // Why: each fixture pins its own passphrase value (most are '', the
+      // 'PROPHET' fixture is the wiring check). We deliberately do NOT read
+      // $('passphrase').value here — the self-test asserts the derivation
+      // pipeline against documented expected pubkeys, not the current UI
+      // state, so it must be reproducible regardless of what the user typed.
+      const seed64 = await bip39Seed(words, v.passphrase);
+      const seed32 = seed64.slice(0, 32);
+      seed64.fill(0);
+      const kp = nacl.sign.keyPair.fromSeed(seed32);
+      const got = bytesToHex(kp.publicKey);
+      // Wipe the just-derived secret material from the self-test path before
+      // we touch DOM. Same hygiene as the real Derive Key flow.
+      seed32.fill(0);
+      kp.secretKey.fill(0);
+      kp.publicKey.fill(0);
+      if (got !== v.pubHex) failures.push(`${v.id}: got ${got}, want ${v.pubHex}`);
+    }
+    if (failures.length === 0) {
+      result.className = 'ok';
+      result.textContent = `OK — all ${SELF_TEST_VECTORS.length} fixtures (${TEST_VECTORS.length} empty-passphrase + 1 passphrase wiring) derive the expected pubkey`;
+    } else {
+      result.className = 'err';
+      result.textContent = 'FAIL: ' + failures.join('; ');
+    }
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('deriveBtn').addEventListener('click', deriveKey);
+
+async function deriveKey() {
+  seedErr.textContent = '';
+  const words = wordInputs.map((i) => i.value.trim().toLowerCase());
+  if (words.some((w) => !w)) {
+    seedErr.textContent = 'all 24 fields must be filled';
+    return;
+  }
+  const v = await validateMnemonic24(words);
+  if (!v.ok) { seedErr.textContent = v.error; return; }
+
+  // Read verbatim: no trim, no normalize — NFKD happens inside bip39Seed.
+  const passphrase = $('passphrase').value;
+
+  // Pure-JS PBKDF2 blocks the main thread for ~100–500 ms. Disable the button
+  // and show "Deriving…" so the user gets feedback that work is happening;
+  // bip39Seed() yields once before its loop so this paint actually lands.
+  const btn = $('deriveBtn');
+  const oldText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Deriving…';
+  try {
+    // Step 3: PBKDF2 seed.
+    // Why pass passphrase: same words + different passphrase = different
+    // key (BIP39's mechanism for multiple identities behind one mnemonic).
+    const seed64 = await bip39Seed(words, passphrase);
+    // Step 4: first 32 bytes → Ed25519 seed.
+    SEED32 = seed64.slice(0, 32);
+    // Wipe the unused high half of the BIP39 seed eagerly.
+    seed64.fill(0);
+    const kp = nacl.sign.keyPair.fromSeed(SEED32);
+    // fromSeed has copied SEED32 into kp.secretKey's first 32 bytes; wipe SEED32
+    // now rather than waiting for Clear & Lock so the seed lives the shortest
+    // possible time. zeroAll() is null-safe, so this is fine on the lock path too.
+    SEED32.fill(0);
+    SEED32 = null;
+    PUBLIC_KEY = kp.publicKey;
+    SECRET_KEY = kp.secretKey;
+
+    enterScreen2();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// UI: Screen 2 — signing workspace
+// ---------------------------------------------------------------------------
+
+// Why: the mnemonic and passphrase together fully derive the secret key, so
+// both are key material and must not sit in the DOM through the Screen 2
+// session (spec: "no key material in DOM"). Called from enterScreen2 (after
+// derivation succeeded) and from Clear & Lock.
+// Not earlier in deriveKey because: deriveKey has no catch, so a throw from
+// bip39Seed / fromSeed / enterScreen2 after an early wipe would leave the user
+// on Screen 1 with 24 blank fields and no error message. Wiping here also
+// removes the 100–500 ms window where the fields showed blank under
+// "Deriving…", which reads as data loss.
+function clearSeedInputs() {
+  for (const inp of wordInputs) {
+    inp.value = '';
+    inp.parentNode.classList.remove('bad', 'good');
+  }
+  $('passphrase').value = '';
+}
+
+function enterScreen2() {
+  $('fp').textContent = sshFingerprint(PUBLIC_KEY);
+  $('msg').value = '';
+  $('signErr').textContent = '';
+  $('pubQrBox').classList.add('hidden');
+  $('sigQrBox').classList.add('hidden');
+
+  // If the derived pub matches a documented BIP39 test-vector pub, surface
+  // a loud warning. Catches both "user clicked Test Vector N and forgot"
+  // and "user typed a published mnemonic by mistake".
+  const pubHex = bytesToHex(PUBLIC_KEY);
+  const tvId = TEST_VECTOR_PUBS.get(pubHex);
+  const warn = $('testKeyWarn');
+  if (tvId) {
+    warn.textContent = `⚠ TEST KEY (${tvId}) — this mnemonic is published. Anyone can sign with the same key. Do NOT use for real signing.`;
+    warn.classList.remove('hidden');
+  } else {
+    warn.textContent = '';
+    warn.classList.add('hidden');
+  }
+
+  clearSeedInputs();
+  screen1.classList.add('hidden');
+  screen2.classList.remove('hidden');
+}
+
+$('exportPubBtn').addEventListener('click', () => {
+  if (!PUBLIC_KEY) return;
+  const payload = sshPubLine(PUBLIC_KEY);
+  renderQr($('pubQrImg'), payload);
+  $('pubQrPayload').textContent = payload;
+  $('pubQrBox').classList.remove('hidden');
+});
+
+$('signBtn').addEventListener('click', () => {
+  $('signErr').textContent = '';
+  if (!SECRET_KEY) return;
+  let msg = $('msg').value;
+  if (!msg) { $('signErr').textContent = 'message is empty'; return; }
+  const namespace = $('namespace').value.trim();
+  if (!namespace) { $('signErr').textContent = 'namespace is empty: "file" for a file, "git" for a commit object'; return; }
+  if ($('asFile').checked) {
+    if (msg.endsWith('\n')) {
+      $('signErr').textContent = 'the text already ends with a newline: remove it, or untick "Sign as a file" to sign it as typed';
+      return;
+    }
+    msg += '\n';
+  }
+  const payload = sshsigSign(utf8(msg), SECRET_KEY, PUBLIC_KEY, namespace);
+  renderQr($('sigQrImg'), payload);
+  $('sigQrPayload').textContent = payload;
+  $('sigQrBox').classList.remove('hidden');
+});
+
+$('lockBtn').addEventListener('click', () => {
+  zeroAll();
+  // Remove the public-key fingerprint and any QR data URLs from the DOM.
+  $('fp').textContent = '';
+  $('pubQrImg').removeAttribute('src');
+  $('sigQrImg').removeAttribute('src');
+  $('pubQrPayload').textContent = '';
+  $('sigQrPayload').textContent = '';
+  $('msg').value = '';
+  $('asFile').checked = true;
+  $('namespace').value = 'file';
+  $('pubQrBox').classList.add('hidden');
+  $('sigQrBox').classList.add('hidden');
+  $('testKeyWarn').textContent = '';
+  $('testKeyWarn').classList.add('hidden');
+  $('selfTestResult').textContent = '';
+  $('selfTestResult').className = 'muted';
+  clearSeedInputs();
+  seedErr.textContent = '';
+  screen2.classList.add('hidden');
+  screen1.classList.remove('hidden');
+  wordInputs[0].focus();
+});
+
+// Focus first word on load.
+wordInputs[0].focus();
+
+// ---------------------------------------------------------------------------
+// Offline copy (Home Screen web app)
+// ---------------------------------------------------------------------------
+// A service worker needs https. Under file:// navigator.serviceWorker still
+// exists but register() rejects, so the gate is the protocol, not the
+// property, and the page under file:// stays as it was. The version shown
+// comes from sw.js, the only file the browser refetches past the cache; see
+// the comment there.
+if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
+  const offline = $('offline');
+  offline.classList.remove('hidden');
+  offline.textContent = 'offline copy: none';
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    offline.textContent = 'offline copy: ready, version ' + e.data.version;
+  });
+  navigator.serviceWorker.register('./sw.js')
+    .then(() => navigator.serviceWorker.ready)
+    .then((reg) => reg.active.postMessage('version'))
+    .catch((e) => { offline.textContent = 'offline copy: failed, ' + e.message; });
+}
+</script>
+</body>
+</html>

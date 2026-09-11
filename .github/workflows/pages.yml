@@ -1,0 +1,25 @@
+# Why a workflow and not "deploy from a branch": that mode serves only / or
+# /docs, which forced the JS signer into a folder named for a hosting quirk.
+# The workflow uploads js-okp-signer/ as the site, verbatim, so the folder
+# can carry its real name and the served bytes equal the bytes in git.
+name: pages
+on:
+  push:
+    branches: [master]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: js-okp-signer
+      - id: deployment
+        uses: actions/deploy-pages@v4

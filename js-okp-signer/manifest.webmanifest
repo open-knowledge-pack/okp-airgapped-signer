@@ -1,0 +1,10 @@
+{
+  "name": "okpair gap-signer",
+  "short_name": "gap-signer",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#111111",
+  "icons": [{ "src": "icon-180.png", "sizes": "180x180", "type": "image/png" }]
+}
