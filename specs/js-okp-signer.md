@@ -79,6 +79,8 @@ This is how the page meets BIP39's NFKD requirement; the module refuses the inpu
 Twenty-four separate input fields, numbered.
 Each field validates as you type: the word is lower-cased and trimmed in place, and the field is marked good or bad against the word list.
 Space or Enter moves to the next field; Enter in the last field derives.
+While "Deriving…" is up, Enter there does nothing:
+the disabled button is the lock, and `deriveKey` checks it itself, because the Enter path does not go through the button.
 Space in the last field does nothing at all: the key is swallowed, no space is typed and no derivation starts.
 
 The passphrase input sits below the fields as a single line, `type="password"`, with a "show" checkbox that switches it to `type="text"` and back.

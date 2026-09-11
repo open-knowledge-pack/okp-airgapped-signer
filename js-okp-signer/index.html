@@ -5322,6 +5322,12 @@ $('showPassphrase').addEventListener('change', (e) => {
 $('deriveBtn').addEventListener('click', deriveKey);
 
 async function deriveKey() {
+  // Why the button's state is the lock: a click cannot arrive while the
+  // button is disabled, but Enter in field 24 calls this directly, and a
+  // second derivation started under "Deriving…" would overwrite the key
+  // the first one is about to install.
+  const btn = $('deriveBtn');
+  if (btn.disabled) return;
   seedErr.textContent = '';
   const words = wordInputs.map((i) => i.value.trim().toLowerCase());
   if (words.some((w) => !w)) {
@@ -5337,7 +5343,6 @@ async function deriveKey() {
   // Pure-JS PBKDF2 blocks the main thread for ~100–500 ms. Disable the button
   // and show "Deriving…" so the user gets feedback that work is happening;
   // bip39Seed() yields once before its loop so this paint actually lands.
-  const btn = $('deriveBtn');
   const oldText = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Deriving…';
