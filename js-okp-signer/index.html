@@ -202,7 +202,9 @@
            catches it. Runs all four fixtures — these three at the empty
            passphrase plus tv1 under "PROPHET" — through the page's own
            validate→PBKDF2→fromSeed path and asserts the resulting pubkeys
-           match the documented hex. -->
+           match the documented hex. Under tv1 it also signs a fixed
+           message and compares the whole SSHSIG block with the documented
+           one, so the signing path is checked too, not only derivation. -->
       <div id="selfTestResult" class="muted"></div>
     </details>
   </section>
@@ -4983,6 +4985,12 @@ function sshsigSign(msgBytes, secretKey, pub, namespace) {
   const signedData = concatBytes(SSHSIG_MAGIC, ns, reserved, hashAlg,
                                  sshString(nacl.hash(msgBytes)));
   const sig = nacl.sign.detached(signedData, secretKey);
+  // Why check the signature here: a signer that produced a bad block would
+  // otherwise be found on the desktop, one QR round trip later. This also
+  // proves `pub` is the key `secretKey` belongs to.
+  if (!nacl.sign.detached.verify(signedData, sig, pub)) {
+    throw new Error('the signature does not verify under its own public key');
+  }
   const sigBlob = concatBytes(sshString(utf8('ssh-ed25519')), sshString(sig));
   const version = new Uint8Array([0, 0, 0, 1]);
   const blob = concatBytes(SSHSIG_MAGIC, version, sshString(sshPubBlob(pub)),
@@ -5259,6 +5267,20 @@ const SELF_TEST_VECTORS = [
   { id: 'tv1+PROPHET', mnemonic: TEST_VECTORS[0].mnemonic, passphrase: 'PROPHET',
     pubHex: '0abd856befd1aaaacfe339bd573dbbcb979d760926ca2e653b8b98e49faa35f9' },
 ];
+// A fixed signature: Ed25519 is deterministic, so tv1 signing this message
+// under this namespace gives this block, every time. The pubkey fixtures
+// above prove derivation; this one proves the signing path, wire format and
+// armor included. The block was produced by the page's own sshsigSign and
+// checked with `ssh-keygen -Y verify -n file` against tv1's public key.
+const SIGN_VECTOR = {
+  id: 'tv1', message: 'okp-airgapped-signer\n', namespace: 'file',
+  block: '-----BEGIN SSH SIGNATURE-----\n' +
+    'U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgHeNS5EzTM2clk/IzSnMOGAqvKQ\n' +
+    '3omqFtSA3llONOKWEAAAAEZmlsZQAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gtZWQyNTUx\n' +
+    'OQAAAEChyZa4gnsdeDJCRTcA+4u33z45pbla2aCXx+pGAnfEMCyWktVNv7hhOyCy29S9q4\n' +
+    '+SJkFzZ2Q0JV9mBBbI2ZUD\n' +
+    '-----END SSH SIGNATURE-----\n',
+};
 // Why built from SELF_TEST_VECTORS, not TEST_VECTORS: the banner says "this
 // mnemonic is published. Anyone can sign with the same key." That is equally
 // true for tv1 + 'PROPHET' — both the mnemonic and the passphrase are in this
@@ -5300,16 +5322,26 @@ $('selfTestBtn').addEventListener('click', async () => {
       seed64.fill(0);
       const kp = nacl.sign.keyPair.fromSeed(seed32);
       const got = bytesToHex(kp.publicKey);
-      // Wipe the just-derived secret material from the self-test path before
-      // we touch DOM. Same hygiene as the real Derive Key flow.
-      seed32.fill(0);
-      kp.secretKey.fill(0);
-      kp.publicKey.fill(0);
+      // The signing check needs the secret key, so it runs before the wipe.
+      // Only under the passphrase-less tv1: that is the key the block is for.
+      let signed = null;
+      try {
+        if (v.id === SIGN_VECTOR.id) {
+          signed = sshsigSign(utf8(SIGN_VECTOR.message), kp.secretKey, kp.publicKey, SIGN_VECTOR.namespace);
+        }
+      } finally {
+        // Wipe the just-derived secret material from the self-test path
+        // before we touch DOM, on a throw too. Same hygiene as Derive Key.
+        seed32.fill(0);
+        kp.secretKey.fill(0);
+        kp.publicKey.fill(0);
+      }
       if (got !== v.pubHex) failures.push(`${v.id}: got ${got}, want ${v.pubHex}`);
+      if (signed !== null && signed !== SIGN_VECTOR.block) failures.push(`${v.id}: the signature block differs from the documented one`);
     }
     if (failures.length === 0) {
       result.className = 'ok';
-      result.textContent = `OK — all ${SELF_TEST_VECTORS.length} fixtures (${TEST_VECTORS.length} empty-passphrase + 1 passphrase wiring) derive the expected pubkey`;
+      result.textContent = `OK — all ${SELF_TEST_VECTORS.length} fixtures (${TEST_VECTORS.length} empty-passphrase + 1 passphrase wiring) derive the expected pubkey, and tv1 signs the fixed message to the documented block`;
     } else {
       result.className = 'err';
       result.textContent = 'FAIL: ' + failures.join('; ');

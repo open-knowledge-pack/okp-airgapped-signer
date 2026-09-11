@@ -118,11 +118,21 @@ The two paste paths do not, although a paste can carry a published mnemonic just
 ### Verify test vectors
 
 The button runs all four documented vectors of `main.md` through the page's own path — `validateMnemonic24`, then `bip39Seed`, then `nacl.sign.keyPair.fromSeed` — and compares each public key with the documented hex.
+Under tv1 it also signs a fixed message, `okp-airgapped-signer` plus one LF, under the namespace `file`,
+and compares the whole armored block with the one pinned in the page
+— Ed25519 is deterministic, so the block is fixed —
+which checks the signing path, wire format and armor included, where the public keys check derivation alone.
+The pinned block was produced by the page's own `sshsigSign` and checked with `ssh-keygen -Y verify -n file` against tv1's public key.
 It reports OK with the count, or FAIL naming each vector that missed and what it produced.
 
 It exists because the documented hex is a claim nothing else in the page enforces: without it, a regression in the derivation path would drift away from the published values in silence.
 Each fixture carries its own passphrase, and the self-test deliberately ignores whatever is typed in the passphrase field, so its result depends on the code and not on the current UI state.
 Secret material derived inside the self-test is zeroed before it touches the DOM.
+
+Every signature is verified right after it is made, inside `sshsigSign`, with `nacl.sign.detached.verify` under the public key that goes into the block;
+a failure throws and reaches the error line under Sign, so a bad block is refused on the phone instead of found on the desktop one QR round trip later.
+A failed Sign also removes the QR and the block of an earlier Sign, so nothing scannable sits under the error.
+The check also proves the public key on screen is the key the secret key belongs to.
 
 ## Screen 2: signing workspace
 
@@ -214,7 +224,7 @@ These are the requirements only the page can be tested against.
 - Clear & Lock really clears: after the click, the old fingerprint is no longer in the DOM.
 - Pasting a 24-word phrase into any field leaves no stale word from an earlier vector.
   A shorter paste is a splice and deliberately leaves the other fields as they were.
-- The Verify test vectors button reports OK for all four documented vectors.
+- The Verify test vectors button reports OK for all four documented vectors, and for the fixed tv1 signature block.
 - The test-key banner appears above the fingerprint after deriving from a published mnemonic.
 - Under `file://` the page registers no service worker, while under `https:` it registers one.
   Both halves are the check: the gate is the protocol and `navigator.serviceWorker` is present either way, so a run that registers nothing proves nothing on its own.
