@@ -81,8 +81,23 @@ Each field validates as you type: the word is lower-cased and trimmed in place, 
 Space or Enter moves to the next field; Enter in the last field derives.
 Space in the last field does nothing at all: the key is swallowed, no space is typed and no derivation starts.
 
-The passphrase input sits below the fields as a single line, `type="text"`, not `type="password"`.
-The device is assumed air-gapped and shoulder-surfing is out of scope, while a visible field lets the user catch a typo that would otherwise silently derive a different key.
+The passphrase input sits below the fields as a single line, `type="password"`, with a "show" checkbox that switches it to `type="text"` and back.
+Why hidden by default:
+a phone keyboard learns the words typed into a text field and can sync what it learned,
+so a passphrase typed there can leave the air-gapped device;
+a password field is the one input the keyboard does not learn from.
+The field was `type="text"` before,
+on the grounds that shoulder-surfing is out of scope and a visible field lets the user catch a typo that would otherwise silently derive a different key.
+Both grounds still hold, and the checkbox keeps the second:
+tick it to read back what was typed.
+Typing while it is ticked is typing into a text field again, learning included, and the label says so.
+A password field also invites the browser's password manager, which syncs:
+the field carries `autocomplete="new-password"`, since `off` is widely ignored on password fields.
+That token means "a new password, as when creating an account", so saved passwords are not offered;
+a browser may instead offer to generate one, or to save what was typed,
+and the label says to decline, which covers both.
+Whether a field outside any form gets either offer depends on the browser and has not been tested.
+Clear & Lock unticks it.
 Its help text says what `main.md` requires it to say.
 
 Buttons: Derive Key, Paste full phrase, Clear words.
@@ -117,7 +132,7 @@ The message area is a `textarea`, which is what makes the newline rules of `main
 Export Public Key renders the OpenSSH public-key line as a QR and prints the same line below it.
 Sign renders the armored SSHSIG block as a QR and prints the same block below it, for copy-paste.
 
-Clear & Lock wipes the key material, empties the fingerprint, the QR images, the payload texts, the message, the seed fields and the passphrase field, clears the test-key banner and the self-test line, re-ticks "Sign as a file", sets the namespace back to `file`, and returns to Screen 1.
+Clear & Lock wipes the key material, empties the fingerprint, the QR images, the payload texts, the message, the seed fields and the passphrase field, clears the test-key banner and the self-test line, re-ticks "Sign as a file", sets the namespace back to `file`, hides the passphrase again, and returns to Screen 1.
 
 ## The textarea normalizes line endings, so a CRLF file cannot be signed here
 

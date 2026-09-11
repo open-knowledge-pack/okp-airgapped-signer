@@ -61,7 +61,7 @@
     outline: none;
     padding: 4px 0;
   }
-  textarea, input[type=text] {
+  textarea, input[type=text], input[type=password] {
     width: 100%;
     box-sizing: border-box;
     background: #1a1a1a;
@@ -144,11 +144,31 @@
     <div id="words" class="row"></div>
     <!-- Why: passphrase is part of BIP39's threat model — same words +
          different passphrase = different key. Field is mandatory in the
-         UI per spec; empty value is the canonical default. type="text"
-         (not password): air-gapped, shoulder-surfing out of scope, and a
-         visible field lets the user catch typos. -->
+         UI per spec; empty value is the canonical default.
+         Why type="password": a phone keyboard learns the words typed into
+         a text field and can sync what it learned, so a passphrase typed
+         there can leave the device. A password field is the one input the
+         keyboard does not learn from. Shoulder-surfing is still out of
+         scope; the field used to be type="text" so a typo could be seen,
+         and the "show" box below keeps that: tick it to read back what
+         was typed. Typing while it is ticked is typing into a text field
+         again, learning included. -->
     <h2>BIP39 passphrase (optional — leave blank if you don't use one)</h2>
-    <input id="passphrase" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <!-- Why autocomplete="new-password": a password field invites the
+         browser's password manager, which syncs. "off" is widely ignored on
+         password fields. "new-password" says "a new password, as when
+         creating an account", so saved passwords are not offered; a browser
+         may instead offer to generate one, or to save what was typed, and
+         the label's "decline" covers both. Whether a field outside any form
+         gets either offer is up to the browser and untested here. -->
+    <input id="passphrase" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <label class="muted">
+      <input type="checkbox" id="showPassphrase">
+      Show the passphrase, to check it for typos. Type it hidden: a phone
+      keyboard learns from a visible field and may sync what it learned.
+      If the browser offers to save the passphrase, decline: a saved
+      password syncs too.
+    </label>
     <div class="muted">
       Blank is fine and is the canonical default (matches the documented
       test vectors). Any non-empty passphrase becomes part of the key and
@@ -5261,6 +5281,10 @@ $('selfTestBtn').addEventListener('click', async () => {
   }
 });
 
+$('showPassphrase').addEventListener('change', (e) => {
+  $('passphrase').type = e.target.checked ? 'text' : 'password';
+});
+
 $('deriveBtn').addEventListener('click', deriveKey);
 
 async function deriveKey() {
@@ -5394,6 +5418,8 @@ $('lockBtn').addEventListener('click', () => {
   $('msg').value = '';
   $('asFile').checked = true;
   $('namespace').value = 'file';
+  $('showPassphrase').checked = false;
+  $('passphrase').type = 'password';
   $('pubQrBox').classList.add('hidden');
   $('sigQrBox').classList.add('hidden');
   $('testKeyWarn').textContent = '';
