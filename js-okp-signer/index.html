@@ -4993,6 +4993,10 @@ function sshsigSign(msgBytes, secretKey, pub, namespace) {
          (b64.endsWith('\n') ? '' : '\n') + '-----END SSH SIGNATURE-----\n';
 }
 
+// An error's text for the page. renderQr's library throws plain strings,
+// so `e.message` alone would print "undefined" for those.
+function errorText(e) { return (e && e.message) || String(e); }
+
 // `sha256` is defined in the PURE-JS CRYPTO block above; it returns a
 // Uint8Array(32) synchronously. Call sites still write `await sha256(...)`
 // for diff minimality — `await` on a non-promise just returns the value.
@@ -5310,6 +5314,10 @@ $('selfTestBtn').addEventListener('click', async () => {
       result.className = 'err';
       result.textContent = 'FAIL: ' + failures.join('; ');
     }
+  } catch (e) {
+    // Why a catch: a throw here used to leave "running…" on screen for good.
+    result.className = 'err';
+    result.textContent = 'FAIL: ' + errorText(e);
   } finally {
     btn.disabled = false;
   }
@@ -5365,6 +5373,14 @@ async function deriveKey() {
     SECRET_KEY = kp.secretKey;
 
     enterScreen2();
+  } catch (e) {
+    // Why a catch: without it a throw from bip39Seed, fromSeed or
+    // enterScreen2 went to the console only, and the user saw the button
+    // come back with nothing said.
+    // Why zeroAll: a throw in enterScreen2 comes after the key was
+    // installed, and Screen 1 has no Clear & Lock to drop it.
+    zeroAll();
+    seedErr.textContent = 'derivation failed: ' + errorText(e);
   } finally {
     btn.disabled = false;
     btn.textContent = oldText;
@@ -5379,11 +5395,11 @@ async function deriveKey() {
 // both are key material and must not sit in the DOM through the Screen 2
 // session (spec: "no key material in DOM"). Called from enterScreen2 (after
 // derivation succeeded) and from Clear & Lock.
-// Not earlier in deriveKey because: deriveKey has no catch, so a throw from
-// bip39Seed / fromSeed / enterScreen2 after an early wipe would leave the user
-// on Screen 1 with 24 blank fields and no error message. Wiping here also
-// removes the 100–500 ms window where the fields showed blank under
-// "Deriving…", which reads as data loss.
+// Not earlier in deriveKey because: a throw from bip39Seed / fromSeed /
+// enterScreen2 after an early wipe would leave the user on Screen 1 with 24
+// blank fields under the error message, retyping the phrase to retry.
+// Wiping here also removes the 100–500 ms window where the fields showed
+// blank under "Deriving…", which reads as data loss.
 function clearSeedInputs() {
   for (const inp of wordInputs) {
     inp.value = '';
@@ -5440,10 +5456,18 @@ $('signBtn').addEventListener('click', () => {
     }
     msg += '\n';
   }
-  const payload = sshsigSign(utf8(msg), SECRET_KEY, PUBLIC_KEY, namespace);
-  renderQr($('sigQrImg'), payload);
-  $('sigQrPayload').textContent = payload;
-  $('sigQrBox').classList.remove('hidden');
+  try {
+    const payload = sshsigSign(utf8(msg), SECRET_KEY, PUBLIC_KEY, namespace);
+    renderQr($('sigQrImg'), payload);
+    $('sigQrPayload').textContent = payload;
+    $('sigQrBox').classList.remove('hidden');
+  } catch (e) {
+    // A block from an earlier Sign must not stay on screen under the error.
+    $('sigQrImg').removeAttribute('src');
+    $('sigQrPayload').textContent = '';
+    $('sigQrBox').classList.add('hidden');
+    $('signErr').textContent = 'signing failed: ' + errorText(e);
+  }
 });
 
 $('lockBtn').addEventListener('click', () => {

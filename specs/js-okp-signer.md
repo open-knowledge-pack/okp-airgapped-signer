@@ -165,7 +165,13 @@ The secret key, the public key and the Ed25519 seed live in top-level variables 
 The 32-byte seed variable is zeroed and dropped immediately after `fromSeed` has copied it, rather than waiting for Clear & Lock.
 That removes one copy of two, not the seed: an Ed25519 secret key is the seed followed by the public key, so the first 32 bytes of the secret key are that same seed, and they live until Clear & Lock like the rest of it.
 The mnemonic fields and the passphrase field are cleared when Screen 2 opens, since together they fully derive the key and would otherwise sit in the DOM for the whole session.
-They are not cleared earlier: the derivation has no catch, so an early wipe followed by a throw would leave the user on Screen 1 with 24 blank fields and no error, and clearing at the start would also blank the fields for the 100 to 500 ms of "Deriving…", which reads as data loss.
+They are not cleared earlier: an early wipe followed by a throw would leave the user on Screen 1 with 24 blank fields under the error, retyping the phrase to retry, and clearing at the start would also blank the fields for the 100 to 500 ms of "Deriving…", which reads as data loss.
+
+A throw in the derivation, in the self-test or in signing lands in the error line of that screen, prefixed "derivation failed", "FAIL" or "signing failed".
+A failed derivation also drops any key it had already installed,
+since a throw late in the path, when Screen 2 is being set up, comes after the key is in place, and Screen 1 has no Clear & Lock.
+Before, the derivation and the self-test had a `finally` and no `catch`,
+so a throw restored the button and left "running…" in place, and the reason went to the console alone.
 
 Clear & Lock calls `fill(0)` on the key buffers.
 The derivation path wipes its own working buffers as soon as each is done with:
