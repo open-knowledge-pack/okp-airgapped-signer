@@ -166,7 +166,17 @@ The mnemonic fields and the passphrase field are cleared when Screen 2 opens, si
 They are not cleared earlier: the derivation has no catch, so an early wipe followed by a throw would leave the user on Screen 1 with 24 blank fields and no error, and clearing at the start would also blank the fields for the 100 to 500 ms of "Deriving…", which reads as data loss.
 
 Clear & Lock calls `fill(0)` on the key buffers.
-That is best-effort and the code says so: the JavaScript garbage collector may have copied a buffer internally, and nothing in the language can reach those copies.
+The derivation path wipes its own working buffers as soon as each is done with:
+the 33 index bytes in `validateMnemonic24`, which no longer returns the entropy since nothing read it;
+the password and salt bytes in `bip39Seed`;
+the pads and working buffers in `hmacSha512` and `pbkdf2HmacSha512`
+— under PBKDF2 the pads are SHA-512 of the mnemonic XOR a constant, enough to recompute the seed, and a fresh copy was made 2048 times per derivation;
+the unused half of the BIP39 seed and the 32-byte Ed25519 seed in `deriveKey`.
+What nothing in the page can wipe, and the code says so at `zeroAll`:
+the mnemonic, its 24 words and the passphrase, which are JavaScript strings, immutable, alive until the garbage collector drops them;
+tweetnacl's own SHA-512 scratch, which copies the tail of every message it hashes — the mnemonic's tail past 128 bytes, the salt with the passphrase, each HMAC round's input — and is never zeroed;
+and any copy the engine made while moving objects.
+So the wipes shorten the life of the key material; they do not end it.
 
 The key survives several Sign clicks in one session.
 Screen 2 has separate Sign and Clear & Lock buttons for exactly that reason: re-deriving per signature would force 24 words to be retyped for every document, and it would buy nothing, because the seed and the key sit in memory either way until the lock.

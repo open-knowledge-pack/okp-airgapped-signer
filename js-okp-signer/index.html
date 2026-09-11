@@ -4788,10 +4788,13 @@ function sha256(bytes) {
 // ---------------------------------------------------------------------------
 function hmacSha512(key, msg) {
   const B = 128;
-  let k = key;
-  if (k.length > B) k = nacl.hash(k);
-  if (k.length < B) {
-    const padded = new Uint8Array(B);
+  // Both buffers made here are wiped at the end; a key longer than one block
+  // takes both paths, so `hashed` must be held on its own or it would be
+  // reassigned away before the wipe.
+  const hashed = key.length > B ? nacl.hash(key) : null;
+  let k = hashed || key;
+  const padded = k.length < B ? new Uint8Array(B) : null;
+  if (padded) {
     padded.set(k);
     k = padded;
   }
@@ -4803,7 +4806,16 @@ function hmacSha512(key, msg) {
   const innerHash = nacl.hash(inner);
   const outer = new Uint8Array(B + 64);
   outer.set(opad); outer.set(innerHash, B);
-  return nacl.hash(outer);
+  const mac = nacl.hash(outer);
+  // Why wipe here: under PBKDF2 the key is the mnemonic, longer than one
+  // block, so `k` is SHA-512(mnemonic) and the pads are that value XOR a
+  // constant. Knowing it is enough to recompute the seed, and this function
+  // makes a fresh copy of it 2048 times per derivation. The caller's key is
+  // never touched.
+  if (hashed) hashed.fill(0);
+  if (padded) padded.fill(0);
+  opad.fill(0); ipad.fill(0); inner.fill(0); outer.fill(0); innerHash.fill(0);
+  return mac;
 }
 
 // ---------------------------------------------------------------------------
@@ -4826,11 +4838,16 @@ function pbkdf2HmacSha512(password, salt, iters, dkLen) {
     let U = hmacSha512(password, block);
     const T = new Uint8Array(U); // copy
     for (let j = 1; j < iters; j++) {
+      const prev = U;
       U = hmacSha512(password, U);
+      prev.fill(0);
       for (let k = 0; k < hLen; k++) T[k] ^= U[k];
     }
     out.set(T, (i - 1) * hLen);
+    // T holds the block just written to `out`, U the last HMAC output.
+    T.fill(0); U.fill(0);
   }
+  block.fill(0); // the salt, and with it the passphrase
   return out.subarray(0, dkLen);
 }
 </script>
@@ -4987,14 +5004,17 @@ function sshsigSign(msgBytes, secretKey, pub, namespace) {
 // 24 words × 11 bits = 264 bits = 33 bytes = 32-byte entropy + 1 checksum byte.
 // Checksum byte = first 8 bits of SHA-256(entropy).
 //
-// Returns { ok: true, entropy: Uint8Array(32) } on success,
-// or       { ok: false, error: <string> } on any failure (unknown word,
+// Returns { ok: true } on success,
+// or      { ok: false, error: <string> } on any failure (unknown word,
 // wrong count, or bad checksum).
+// The entropy is not returned: no caller needs it, and a returned copy
+// could not be wiped here.
 
 // Caller invariant: `words` is exactly 24 entries (UI has 24 fixed inputs and
 // the empty-field check in deriveKey runs first). No length guard here.
 async function validateMnemonic24(words) {
   // Build 264 bits of "indexBits" by concatenating each 11-bit index.
+  // Wiped before returning: the entropy is the mnemonic in another form.
   const bits = new Uint8Array(33); // 264 bits = 33 bytes
   let bitPos = 0;
   for (let i = 0; i < 24; i++) {
@@ -5012,15 +5032,15 @@ async function validateMnemonic24(words) {
       bitPos++;
     }
   }
-  const entropy = bits.slice(0, 32);
   const checksumByte = bits[32]; // last 8 bits
-  const h = await sha256(entropy);
+  const h = await sha256(bits.subarray(0, 32)); // a view: no second copy of the entropy
+  bits.fill(0);
   // Why: the BIP39 spec says checksum length = ENT/32; for ENT=256 that's 8 bits.
-  // So we compare the full first byte of SHA-256(entropy) to bits[32].
+  // So we compare the full first byte of SHA-256(entropy) to the saved bits[32].
   if (h[0] !== checksumByte) {
     return { ok: false, error: 'checksum mismatch — last word does not match the BIP39 checksum of the previous 23 words' };
   }
-  return { ok: true, entropy };
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -5042,7 +5062,11 @@ async function bip39Seed(words, passphrase) {
   // Yield once so any "Deriving…" UI updates in deriveKey() can paint
   // before the synchronous PBKDF2 loop blocks the main thread.
   await new Promise((r) => setTimeout(r, 0));
-  return pbkdf2HmacSha512(utf8(mnemonic), utf8(salt), 2048, 64);
+  const password = utf8(mnemonic);
+  const saltBytes = utf8(salt);
+  const seed = pbkdf2HmacSha512(password, saltBytes, 2048, 64);
+  password.fill(0); saltBytes.fill(0);
+  return seed;
 }
 
 // ---------------------------------------------------------------------------
@@ -5054,8 +5078,18 @@ let PUBLIC_KEY = null; // Uint8Array(32)
 let SEED32     = null; // Uint8Array(32)  (BIP39 seed first half; wiped immediately after fromSeed — see deriveKey)
 
 function zeroAll() {
-  // Best-effort wipe. The JS GC may have copied these buffers internally;
-  // we cannot guarantee no traces remain. Document this limitation honestly.
+  // What this wipes: the three buffers below. What the derivation path
+  // wipes on its own, as soon as each is done with: the 33 index bytes in
+  // validateMnemonic24, the password and salt bytes in bip39Seed, the pads
+  // and working buffers in hmacSha512 and pbkdf2HmacSha512, the unused half
+  // of the BIP39 seed and the 32-byte Ed25519 seed in deriveKey.
+  // What nothing here can wipe: the mnemonic, its 24 words and the
+  // passphrase, which are JavaScript strings, immutable, and live until the
+  // garbage collector drops them; tweetnacl's own SHA-512 scratch, which
+  // copies the tail of every message it hashes (the mnemonic's tail past
+  // 128 bytes, the salt with the passphrase, each HMAC round's input) and
+  // is never zeroed; and any copy the engine made while moving objects.
+  // So a wipe here shortens the life of the key material; it does not end it.
   if (SECRET_KEY) SECRET_KEY.fill(0);
   if (PUBLIC_KEY) PUBLIC_KEY.fill(0);
   if (SEED32)     SEED32.fill(0);
