@@ -70,6 +70,14 @@ SHA-256, HMAC-SHA512 and PBKDF2-HMAC-SHA512 are written in plain JavaScript, lay
 - The cost is a few kilobytes and a derivation that takes roughly 100 to 500 ms instead of being native.
   The Derive Key button shows "Deriving…" and is disabled for that time, and the derivation yields to the event loop once so that repaint actually lands before the blocking loop starts.
 
+The page's own script uses ES2017 syntax and nothing newer:
+`async`/`await` is the newest construct in it,
+and a single newer construct would matter, since a syntax error stops the whole script block, on the very browsers the plain-JavaScript crypto exists for.
+Object spread, ES2018, was the one such construct and is gone;
+`catch` keeps its binding, since dropping it is ES2019.
+The inlined tweetnacl and qrcode-generator are ES5.
+Beyond syntax the page needs `TextEncoder`, `Map`, `String.prototype.normalize` and typed arrays.
+
 NFKD normalization happens inside `bip39Seed`, on the joined mnemonic and on `"mnemonic"` + passphrase.
 The UI passes the passphrase field's value verbatim — no trim, no normalization on the way in.
 This is how the page meets BIP39's NFKD requirement; the module refuses the inputs that would need it instead.

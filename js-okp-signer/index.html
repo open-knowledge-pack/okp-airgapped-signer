@@ -5262,8 +5262,11 @@ const TEST_VECTORS = [
 // expected pubkey at a non-empty passphrase additionally catches passphrase
 // mangling (truncation, lowercasing, double-NFKD). Mnemonic is reused from
 // tv1 so the only difference from the tv1 case is the passphrase argument.
+// Why Object.assign, not `{ ...v }`: object spread is ES2018 and was the one
+// construct in this file above ES2017. A syntax error kills the whole script
+// block, so the newest syntax used decides which old browsers run the page.
 const SELF_TEST_VECTORS = [
-  ...TEST_VECTORS.map((v) => ({ ...v, passphrase: '' })),
+  ...TEST_VECTORS.map((v) => Object.assign({}, v, { passphrase: '' })),
   { id: 'tv1+PROPHET', mnemonic: TEST_VECTORS[0].mnemonic, passphrase: 'PROPHET',
     pubHex: '0abd856befd1aaaacfe339bd573dbbcb979d760926ca2e653b8b98e49faa35f9' },
 ];
