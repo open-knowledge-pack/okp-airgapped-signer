@@ -50,6 +50,12 @@ The cache version lives in `sw.js`, not in the page, and must be bumped whenever
 
 There is deliberately no integrity check inside the page: the code that would print a hash is the code being checked, and any script in the same page can patch what it shows.
 The check lives outside the browser — fetch the URL and hash it, and compare with `git show master:js-okp-signer/index.html | sha256sum`.
+That checks the server, not the phone:
+the worker serves the page it cached on the first launch until `VERSION` changes,
+so an app installed while the server held a wrong page keeps it after the server is fixed,
+and the check passes while the phone runs the wrong page.
+The README says so and gives the sequence that closes the gap
+— remove and re-add the app right after a match, so the install fetches what was just hashed.
 
 ## Crypto in plain JavaScript, not `crypto.subtle`
 

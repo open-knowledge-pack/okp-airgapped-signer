@@ -41,8 +41,9 @@ Compare with the hash from git on the desktop:
 git show master:js-okp-signer/index.html | sha256sum
 ```
 
-The shortcut hashes what the server serves now, not what the phone has cached.
-After a mismatch, remove the Home Screen app and add it again.
+The shortcut hashes what the server serves now, not what the phone has cached, so a match proves the server and says nothing about the installed app.
+The service worker keeps the page it fetched on the first launch until `VERSION` changes, so an app installed while the site served a wrong page keeps that page after the site is fixed, and the check still passes.
+To make the phone hold the page just checked, remove the Home Screen app and add it again right after a match: the new install fetches the page the server serves at that moment.
 
 ## Nushell signer: `nu-okp-signer/`
 
