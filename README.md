@@ -62,4 +62,4 @@ Git checks a commit's signature under `git`,
 so a commit object (`git cat-file -p HEAD`, signed raw) takes `--namespace git` here,
 or `git` in the namespace field on the page.
 
-`help nu-okp-signer derive` prints the documented test vectors with the fingerprint each must give, so the module can be checked by hand where no test toolchain exists.
+`help nu-okp-signer derive` prints the documented test vectors with the fingerprint and the four-glyph key icon each must give, so the module can be checked by hand where no test toolchain exists.

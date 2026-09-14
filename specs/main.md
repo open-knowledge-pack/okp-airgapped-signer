@@ -124,6 +124,74 @@ Raw base64 of the 32 key bytes — the original design — could not be turned i
 It is byte for byte what `ssh-keygen -lf key.pub` prints and what `ssh-keygen -Y verify` names in its success line.
 The earlier design — the first 8 bytes of SHA-256 over the raw key, in hex — gave one key two identities, one on the signing device and one in the verifier's terminal, with no way to compare them by eye.
 
+**The key icon is four glyphs over the same digest.**
+The mnemonic carries a checksum,
+so a wrong word stops the derivation;
+the passphrase carries none,
+so a typo there gives a different key
+and nothing says so but the fingerprint,
+43 characters nobody compares by eye.
+The icon is a picture of the fingerprint's own digest,
+small enough to remember and to compare at a glance,
+in the shape of Spectre's identicon:
+a left arm, a body, a right arm, an accessory.
+
+Take the SHA-256 digest over the wire blob, the bytes the fingerprint encodes,
+and index four tables with its first four bytes,
+each byte reduced modulo the length of its table:
+
+```
+byte 0, left arm  (4):  ╔ ╚ ╰ ═
+byte 1, body      (6):  █ ░ ▒ ▓ ☺ ☻
+byte 2, right arm (4):  ╗ ╝ ╯ ═
+byte 3, accessory (49): ◈ ◎ ◐ ◑ ◒ ◓ ☀ ☁ ☂ ☃ ☄ ★ ☆ ☎ ☏ ⎈ ⌂ ☘ ☢ ☣
+                        ♔ ♕ ♖ ♗ ♘ ♙ ♚ ♛ ♜ ♝ ♞ ♟ ♨ ♩ ♪ ♫ ⚐ ⚑ ⚔ ⚖
+                        ⚙ ⚠ ⌘ ⏎ ✄ ✆ ✈ ✉ ✌
+```
+
+The four glyphs are joined with nothing between them,
+in that order.
+The four documented vectors give,
+with the first four digest bytes in hex:
+
+- tv1 — `3e5e5c7b` → `╰☺╗♙`
+- tv2 — `87def555` → `═█╝⚐`
+- tv3 — `519caa5b` → `╚█╯⌘`
+- tv1 under `"PROPHET"` — `d9e99aac` → `╚☻╯♙`
+
+Both implementations show the icon wherever they show the fingerprint,
+on the same line,
+and each document says how.
+
+Why the digest of the public key and not, as Spectre does, a MAC under the secret:
+the icon is then a pure function of the `SHA256:` string,
+so anyone holding the `.pub` line or the success line of `ssh-keygen -Y verify` can recompute it,
+and neither implementation touches the secret for it.
+
+Why not OpenSSH's randomart, the picture `ssh-keygen -lv` prints:
+it stays inside OpenSSH, which everything else here does,
+but it is 17 by 9 characters
+and does not fit beside the fingerprint on a phone.
+Glyphs were chosen knowing the cost:
+a verifier's terminal cannot draw the icon without this code.
+
+Four tables give 4 x 6 x 4 x 49 = 4704 pictures, about 12 bits.
+That catches a passphrase typo about 4703 times in 4704;
+it does not identify a key,
+and neither implementation may present it as an identity.
+Identity is the fingerprint and the `allowed_signers` match, as before.
+
+The tables are Spectre's with two cuts, and every glyph is part of the format:
+adding, removing or reordering one changes the icon of every existing key.
+Spectre's fifth field, a color, is dropped:
+stderr has no color.
+Every glyph whose Unicode `Emoji_Presentation` property is Yes is dropped from the accessory table
+— `☕ ⌚ ⌛ ⏰ ⚡ ⛄ ⛅ ☔` —
+because iPhone Safari draws those as color pictures and a terminal does not,
+so one key would look different on the tool's two targets.
+The glyphs kept default to text presentation,
+and an implementation must not append U+FE0F or U+FE0E to them.
+
 ### The signature does not name a signer
 
 An SSHSIG block carries the public key it was made with, so a verifier needs nothing else to check it.
@@ -189,6 +257,7 @@ What must hold for both implementations:
 - Empty text is refused in both modes, with no signature produced.
 - A wrong word, a wrong word count or a bad checksum gives a clear error, not a silent wrong key.
 - All four documented vectors derive their documented public key.
+- All four documented vectors show their documented icon.
 - Deriving one of the four raises the test-key warning.
 
 Each document lists what only its own side can be checked for.

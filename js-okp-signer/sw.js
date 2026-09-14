@@ -5,7 +5,7 @@
 // pick up a new index.html.
 // Why not a version inside index.html: a cache-first worker would serve the
 // old index.html forever, so the browser would never see the new value.
-const VERSION = '2026-09-11.1';
+const VERSION = '2026-09-14.1';
 
 const CACHE = 'gap-signer-' + VERSION;
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-180.png'];

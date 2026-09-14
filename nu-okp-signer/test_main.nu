@@ -26,6 +26,7 @@ def "derive normalizes case and spacing and flags the test key" [] {
   let key = ($"  Abandon (($TV1 | split row " " | skip 1 | str join "   ")) \n" | nu-okp-signer derive)
   assert equal $key.public_line $TV1_PUBLIC_LINE
   assert equal $key.fingerprint "SHA256:Pl5ce4l7GkllU5/k5ThzEWO4KidBNCbhKBaj6oxkZO8"
+  assert equal $key.icon "╰☺╗♙"
   assert equal $key.test_key "tv1"
 }
 

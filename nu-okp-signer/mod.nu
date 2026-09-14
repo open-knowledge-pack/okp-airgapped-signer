@@ -32,26 +32,27 @@ const TEST_KEYS = {
 # Pipeline input skips the prompts: a string is the mnemonic (empty
 # passphrase), a record {mnemonic, passphrase} gives both.
 #
-# Returns {fingerprint, public_line, test_key, secret}. Assign it: printing
-# the record shows the secret.
+# Returns {fingerprint, icon, public_line, test_key, secret}. Assign it:
+# printing the record shows the secret.
 #
 # The four examples below are the published vectors of `specs/main.md`, the
 # same four the page's "Verify test vectors" button checks. Nothing runs
 # them: they are here so the check can be run by hand on the air-gapped
 # machine, where the test suite and its toolchain are not available. Paste
-# one in and compare the fingerprint it prints with the one shown here.
+# one in and compare the icon it prints with the one shown here at a
+# glance, and the fingerprint to be sure.
 @example "test vector 1, blank passphrase; about 16 s" {
-  {mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art", passphrase: ""} | nu-okp-signer derive | get fingerprint
-} --result "SHA256:Pl5ce4l7GkllU5/k5ThzEWO4KidBNCbhKBaj6oxkZO8"
+  {mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art", passphrase: ""} | nu-okp-signer derive | select fingerprint icon
+} --result {fingerprint: "SHA256:Pl5ce4l7GkllU5/k5ThzEWO4KidBNCbhKBaj6oxkZO8", icon: "╰☺╗♙"}
 @example "test vector 2, blank passphrase; about 16 s" {
-  {mnemonic: "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo vote", passphrase: ""} | nu-okp-signer derive | get fingerprint
-} --result "SHA256:h971VXJqQUUkrqQ/nEjpFI2gFjGLOfv2hV3RtPuXWMw"
+  {mnemonic: "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo vote", passphrase: ""} | nu-okp-signer derive | select fingerprint icon
+} --result {fingerprint: "SHA256:h971VXJqQUUkrqQ/nEjpFI2gFjGLOfv2hV3RtPuXWMw", icon: "═█╝⚐"}
 @example "test vector 3, blank passphrase; about 16 s" {
-  {mnemonic: "letter advice cage absurd amount doctor acoustic avoid letter advice cage absurd amount doctor acoustic avoid letter advice cage absurd amount doctor acoustic bless", passphrase: ""} | nu-okp-signer derive | get fingerprint
-} --result "SHA256:UZyqW/UIECXHlI1TeX1+XebqEFAcVV3tMSyv+JGPevE"
+  {mnemonic: "letter advice cage absurd amount doctor acoustic avoid letter advice cage absurd amount doctor acoustic avoid letter advice cage absurd amount doctor acoustic bless", passphrase: ""} | nu-okp-signer derive | select fingerprint icon
+} --result {fingerprint: "SHA256:UZyqW/UIECXHlI1TeX1+XebqEFAcVV3tMSyv+JGPevE", icon: "╚█╯⌘"}
 @example "test vector 1 under passphrase PROPHET, which proves the passphrase reaches the salt; about 16 s" {
-  {mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art", passphrase: "PROPHET"} | nu-okp-signer derive | get fingerprint
-} --result "SHA256:2emarN+1I3mvvM6C5bJ6CwZqnl+/j+rloiE5cmRhpfA"
+  {mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art", passphrase: "PROPHET"} | nu-okp-signer derive | select fingerprint icon
+} --result {fingerprint: "SHA256:2emarN+1I3mvvM6C5bJ6CwZqnl+/j+rloiE5cmRhpfA", icon: "╚☻╯♙"}
 export def derive []: [nothing -> record, string -> record, record -> record] {
   let given = $in
   let mnemonic = match ($given | describe --detailed | get type) {
@@ -78,9 +79,10 @@ export def derive []: [nothing -> record, string -> record, record -> record] {
   if $test_key != null {
     print --stderr $"WARNING: TEST KEY \(($test_key)\). This mnemonic is published; anyone can sign with the same key. Do NOT use for real signing."
   }
-  print --stderr $"fingerprint: (sshsig fingerprint $kp.public)"
+  print --stderr $"fingerprint: (sshsig fingerprint $kp.public) (sshsig icon $kp.public)"
   {
     fingerprint: (sshsig fingerprint $kp.public)
+    icon: (sshsig icon $kp.public)
     public_line: (sshsig public-line $kp.public)
     test_key: $test_key
     secret: $kp.secret

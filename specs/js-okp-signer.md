@@ -144,15 +144,20 @@ The check also proves the public key on screen is the key the secret key belongs
 
 ## Screen 2: signing workspace
 
-Top to bottom: the test-key banner when it fires, the fingerprint, the Export Public Key and Clear & Lock buttons, the public-key QR box when it is shown, a horizontal rule, then the message area, the "Sign as a file" checkbox, the namespace field, Sign, and the signature QR box when it is shown.
+Top to bottom: the test-key banner when it fires, the fingerprint with the key icon after it, the Export Public Key and Clear & Lock buttons, the public-key QR box when it is shown, a horizontal rule, then the message area, the "Sign as a file" checkbox, the namespace field, Sign, and the signature QR box when it is shown.
 The rule is the division: identity above it, signing below.
+The key icon of `main.md` sits in the fingerprint box, after the fingerprint, in its own element:
+the probes in `../test/` read the fingerprint element byte for byte against `ssh-keygen -lf`,
+so the icon cannot be text inside it.
+The label above the box calls it a typo check for the passphrase,
+because the heading over it says "Device identity" and the spec forbids presenting the icon as one.
 
 The message area is a `textarea`, which is what makes the newline rules of `main.md` matter here: what is signed is its value as UTF-8.
 
 Export Public Key renders the OpenSSH public-key line as a QR and prints the same line below it.
 Sign renders the armored SSHSIG block as a QR and prints the same block below it, for copy-paste.
 
-Clear & Lock wipes the key material, empties the fingerprint, the QR images, the payload texts, the message, the seed fields and the passphrase field, clears the test-key banner and the self-test line, re-ticks "Sign as a file", sets the namespace back to `file`, hides the passphrase again, and returns to Screen 1.
+Clear & Lock wipes the key material, empties the fingerprint, its icon, the QR images, the payload texts, the message, the seed fields and the passphrase field, clears the test-key banner and the self-test line, re-ticks "Sign as a file", sets the namespace back to `file`, hides the passphrase again, and returns to Screen 1.
 
 ## The textarea normalizes line endings, so a CRLF file cannot be signed here
 
@@ -229,7 +234,7 @@ The CSS is minimal, dark, and framework-free, which is easier on the eyes in a l
 These are the requirements only the page can be tested against.
 
 - The page opens from a local `file://` URL with airplane mode on and works.
-- Clear & Lock really clears: after the click, the old fingerprint is no longer in the DOM.
+- Clear & Lock really clears: after the click, the old fingerprint and its icon are no longer in the DOM.
 - Pasting a 24-word phrase into any field leaves no stale word from an earlier vector.
   A shorter paste is a splice and deliberately leaves the other fields as they were.
 - The Verify test vectors button reports OK for all four documented vectors, and for the fixed tv1 signature block.
@@ -241,7 +246,7 @@ These are the requirements only the page can be tested against.
 `sw_gate.js` and `test_purejs.js` are the exceptions on both counts — they report through their exit code, and they need nothing installed.
 Nothing here is needed to use, host or audit the page.
 
-What they reach: `verify_as_file.js` hands the page's own output to the real `ssh-keygen -Y verify` in both signing modes, and `verify_sshsig.js` does the same in file mode with the bare text and a flipped byte as the negative cases; `verify_fp.js` compares the fingerprints of the three blank-passphrase vectors with `ssh-keygen -lf`; `review_sshsig_crosscheck.js` checks the page's block against what `ssh-keygen -Y sign` produces byte for byte, what a CRLF paste actually signs, and whether the seed or the secret key lands in the DOM after signing; `review_lock_check.js` looks for the public key, the fingerprint and a signature line left in the DOM after the lock; `qr_size.js` measures the QR version a long message produces; `timing.js` measures the pure-JS PBKDF2; `test_purejs.js` checks reference copies of SHA-256, HMAC-SHA512 and PBKDF2 against Node's `crypto`, and `verify.js` re-derives the three blank-passphrase public keys with it; neither of those two loads the page.
+What they reach: `verify_as_file.js` hands the page's own output to the real `ssh-keygen -Y verify` in both signing modes, and `verify_sshsig.js` does the same in file mode with the bare text and a flipped byte as the negative cases; `verify_fp.js` compares the fingerprints of the four documented vectors with `ssh-keygen -lf` and their icons with `main.md`; `review_sshsig_crosscheck.js` checks the page's block against what `ssh-keygen -Y sign` produces byte for byte, what a CRLF paste actually signs, and whether the seed or the secret key lands in the DOM after signing; `review_lock_check.js` looks for the public key, the fingerprint and a signature line left in the DOM after the lock; `qr_size.js` measures the QR version a long message produces; `timing.js` measures the pure-JS PBKDF2; `test_purejs.js` checks reference copies of SHA-256, HMAC-SHA512 and PBKDF2 against Node's `crypto`, and `verify.js` re-derives the three blank-passphrase public keys with it; neither of those two loads the page.
 `sw_gate.js` runs the page's own script blocks in Node's `vm` against a small DOM stub, once under each protocol, and fails unless `https:` registers exactly one worker and `file://` registers none.
 It avoids jsdom on purpose: a check of the offline promise should run where the page runs, on a machine that cannot `npm install`.
 

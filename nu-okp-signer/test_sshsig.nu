@@ -24,6 +24,22 @@ def "fingerprint matches ssh-keygen -lf" [] {
   assert equal (sshsig fingerprint $kp.public) "SHA256:Pl5ce4l7GkllU5/k5ThzEWO4KidBNCbhKBaj6oxkZO8"
 }
 
+# The four documented public keys of specs/main.md and the icon each must
+# give, from the key bytes directly: no derivation, so this runs in ms.
+@test
+def "icon of the four documented vectors matches the spec" [] {
+  let vectors = [
+    [public icon];
+    ["1de352e44cd333672593f2334a730e180aaf290de89aa16d480de594e34e2961" "╰☺╗♙"]
+    ["ea1c7d41a6d70293194f45206ab4dca257d9c252fe2c53779fdef2a2bd05cd47" "═█╝⚐"]
+    ["e88ff5f87c809d2921bf2ee8bd3a176d6fc66b9f90230920f1246b5472c22c13" "╚█╯⌘"]
+    ["0abd856befd1aaaacfe339bd573dbbcb979d760926ca2e653b8b98e49faa35f9" "╚☻╯♙"]
+  ]
+  for v in $vectors {
+    assert equal (sshsig icon (hex-to-bytes $v.public)) $v.icon
+  }
+}
+
 # Expected block computed with node: tweetnacl over the same SSHSIG framing.
 @test
 def "sign produces the expected armored block" [] {

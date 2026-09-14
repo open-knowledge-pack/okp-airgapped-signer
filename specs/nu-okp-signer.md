@@ -14,7 +14,10 @@ let sig = "text" | nu-okp-signer sign $key  # SSHSIG block, about 1 s
 "text" | nu-okp-signer verify $key $sig     # true or false, about 2 s
 ```
 
-`derive` returns a record `{fingerprint, public_line, test_key, secret}` and prints the fingerprint, plus the test-key warning when it applies, to stderr.
+`derive` returns a record `{fingerprint, icon, public_line, test_key, secret}` and prints the fingerprint, plus the test-key warning when it applies, to stderr.
+The key icon of `main.md` follows the fingerprint on that stderr line,
+after one space,
+and is the record's `icon` field.
 It must be assigned: printing the record prints the secret key with it.
 That is a way to leak the key the page does not have, since the page never puts key material anywhere the user can display it.
 
@@ -127,7 +130,7 @@ Dropping that variable, or closing the shell, is the whole of the lock.
 ## The self-check is `@example` blocks
 
 There is no self-test command matching the page's Verify test vectors button.
-The equivalent is `@example` attributes, which `--help` prints: four on `derive`, holding the four documented vectors of `main.md` as pipeline records with the fingerprint each must produce; one on `sign`, holding the whole chain from tv1 to the SSHSIG block over "hello"; and one on `verify`, running that block back through the check.
+The equivalent is `@example` attributes, which `--help` prints: four on `derive`, holding the four documented vectors of `main.md` as pipeline records with the fingerprint and the icon each must produce; one on `sign`, holding the whole chain from tv1 to the SSHSIG block over "hello"; and one on `verify`, running that block back through the check.
 
 Nothing runs them.
 They are documentation, and their point is that the check can be made by hand on the air-gapped machine, where no test toolchain exists: read `--help`, paste one in, compare what it prints with what is printed there.

@@ -66,11 +66,38 @@ export def public-line [public: list<int>]: nothing -> string {
   $"ssh-ed25519 (bytes-to-base64 (public-blob $public))"
 }
 
+# SHA-256 over the wire blob: the bytes the fingerprint encodes and the icon
+# indexes, so both are pictures of one digest.
+def public-digest [public: list<int>]: nothing -> binary {
+  bytes-to-binary (public-blob $public) | hash sha256 --binary
+}
+
 # "SHA256:" + unpadded base64 of SHA-256 over the wire blob, what
 # `ssh-keygen -lf` prints and `-Y verify` names in its success line.
 export def fingerprint [public: list<int>]: nothing -> string {
-  let digest = bytes-to-binary (public-blob $public) | hash sha256 --binary
-  $"SHA256:($digest | encode base64 --nopad)"
+  $"SHA256:(public-digest $public | encode base64 --nopad)"
+}
+
+# The key icon of specs/main.md: four glyphs indexed by the first four bytes
+# of the fingerprint's digest, each modulo its table. Every glyph is part of
+# the format, so a change here changes the icon of every existing key.
+# Why the public key and not, as Spectre does, a MAC under the secret: the
+# icon must be recomputable from the .pub line by anyone. Why a typo check
+# and not an identity: 4 x 6 x 4 x 49 pictures, about 12 bits.
+const ICON_TABLES = [
+  ["╔" "╚" "╰" "═"]
+  ["█" "░" "▒" "▓" "☺" "☻"]
+  ["╗" "╝" "╯" "═"]
+  ["◈" "◎" "◐" "◑" "◒" "◓" "☀" "☁" "☂" "☃" "☄" "★" "☆" "☎" "☏" "⎈" "⌂" "☘" "☢" "☣"
+   "♔" "♕" "♖" "♗" "♘" "♙" "♚" "♛" "♜" "♝" "♞" "♟" "♨" "♩" "♪" "♫" "⚐" "⚑" "⚔" "⚖"
+   "⚙" "⚠" "⌘" "⏎" "✄" "✆" "✈" "✉" "✌"]
+]
+export def icon [public: list<int>]: nothing -> string {
+  let digest = binary-to-bytes (public-digest $public)
+  $ICON_TABLES
+  | enumerate
+  | each {|t| $t.item | get (($digest | get $t.index) mod ($t.item | length)) }
+  | str join
 }
 
 # Armored SSHSIG signature over msg. Ed25519 signs a fixed-size blob holding

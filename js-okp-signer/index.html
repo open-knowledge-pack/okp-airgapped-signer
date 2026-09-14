@@ -112,6 +112,10 @@
     border-radius: 3px;
     word-break: break-all;
   }
+  .icon {
+    font-size: 18px;
+    white-space: nowrap;
+  }
   .qr-box {
     background: #fff;
     padding: 12px;
@@ -219,8 +223,11 @@
          mnemonic going unnoticed. -->
     <div id="testKeyWarn" class="warn hidden"></div>
     <h2>Device identity</h2>
-    <div>Public-key fingerprint (same as <code>ssh-keygen -lf key.pub</code>):</div>
-    <div id="fp" class="fp"></div>
+    <div>Public-key fingerprint (same as <code>ssh-keygen -lf key.pub</code>),
+      and its icon, a typo check for the passphrase:</div>
+    <!-- The icon is its own element, not text inside #fp: the probes in
+         ../test read #fp byte for byte against ssh-keygen -lf. -->
+    <div class="fp"><span id="fp"></span> <span id="icon" class="icon"></span></div>
     <div>
       <button id="exportPubBtn">Export Public Key (QR)</button>
       <button id="lockBtn" class="danger">Clear &amp; Lock</button>
@@ -4969,6 +4976,25 @@ function sshFingerprint(pub) {
   return 'SHA256:' + bytesToBase64(sha256(sshPubBlob(pub))).replace(/=+$/, '');
 }
 
+// Key icon: four glyphs indexed by the first four bytes of the fingerprint's
+// own digest, each modulo its table. Tables and vectors: specs/main.md.
+// Why the public key and not, as Spectre does, a MAC under the secret: the
+// icon must be recomputable from the .pub line by anyone. Why a typo check
+// and not an identity: 4*6*4*49 pictures, about 12 bits. Every glyph is part
+// of the format, and none takes a variation selector (U+FE0E / U+FE0F).
+const ICON_TABLES = [
+  ['╔', '╚', '╰', '═'],
+  ['█', '░', '▒', '▓', '☺', '☻'],
+  ['╗', '╝', '╯', '═'],
+  ['◈', '◎', '◐', '◑', '◒', '◓', '☀', '☁', '☂', '☃', '☄', '★', '☆', '☎', '☏', '⎈', '⌂', '☘', '☢', '☣',
+   '♔', '♕', '♖', '♗', '♘', '♙', '♚', '♛', '♜', '♝', '♞', '♟', '♨', '♩', '♪', '♫', '⚐', '⚑', '⚔', '⚖',
+   '⚙', '⚠', '⌘', '⏎', '✄', '✆', '✈', '✉', '✌'],
+];
+function keyIcon(pub) {
+  const digest = sha256(sshPubBlob(pub));
+  return ICON_TABLES.map((table, i) => table[digest[i] % table.length]).join('');
+}
+
 const SSHSIG_MAGIC = utf8('SSHSIG');
 
 // SSHSIG signature over `msgBytes` under `namespace` (OpenSSH
@@ -5445,6 +5471,7 @@ function clearSeedInputs() {
 
 function enterScreen2() {
   $('fp').textContent = sshFingerprint(PUBLIC_KEY);
+  $('icon').textContent = keyIcon(PUBLIC_KEY);
   $('msg').value = '';
   $('signErr').textContent = '';
   $('pubQrBox').classList.add('hidden');
@@ -5507,8 +5534,9 @@ $('signBtn').addEventListener('click', () => {
 
 $('lockBtn').addEventListener('click', () => {
   zeroAll();
-  // Remove the public-key fingerprint and any QR data URLs from the DOM.
+  // Remove the public-key fingerprint, its icon and any QR data URLs from the DOM.
   $('fp').textContent = '';
+  $('icon').textContent = '';
   $('pubQrImg').removeAttribute('src');
   $('sigQrImg').removeAttribute('src');
   $('pubQrPayload').textContent = '';
