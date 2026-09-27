@@ -76,6 +76,7 @@ export def derive []: [nothing -> record, string -> record, record -> record] {
   # would cost is the code size and auditability this tool is built for.
   let kp = ed25519 keypair ($seed | first 32)
   let test_key = $TEST_KEYS | get --optional (bytes-to-hex $kp.public)
+
   if $test_key != null {
     print --stderr $"WARNING: TEST KEY \(($test_key)\). This mnemonic is published; anyone can sign with the same key. Do NOT use for real signing."
   }
@@ -163,8 +164,9 @@ export def verify [
 # Why one command: `sign` and `verify` must apply the same rule, or `verify`
 # could accept bytes `sign` never produces. The verb only names the caller
 # in the error.
-def message-bytes [raw: bool, verb: string]: string -> list<int> {
+def message-bytes [raw: bool verb: string]: string -> list<int> {
   let text = $in
+
   if ($text | is-empty) {
     error make {msg: $"the text is empty; there is nothing to ($verb)"}
   }
@@ -176,5 +178,6 @@ def message-bytes [raw: bool, verb: string]: string -> list<int> {
     }
     $text + "\n"
   }
+
   string-to-bytes $message
 }

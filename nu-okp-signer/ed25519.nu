@@ -37,11 +37,11 @@ const L = [0xed 0xd3 0xf5 0x5c 0x1a 0x63 0x12 0x58 0xd6 0x9c 0xf7 0xa2 0xde 0xf9
 # loop over limb indexes costs ten times the arithmetic it drives. Measured:
 # gf-mul 3.1 ms to 0.25 ms, one signature 14 s to 1 s.
 
-def gf-add [a: list<int>, b: list<int>]: nothing -> list<int> {
+def gf-add [a: list<int> b: list<int>]: nothing -> list<int> {
   [($a.0 + $b.0) ($a.1 + $b.1) ($a.2 + $b.2) ($a.3 + $b.3) ($a.4 + $b.4) ($a.5 + $b.5) ($a.6 + $b.6) ($a.7 + $b.7) ($a.8 + $b.8) ($a.9 + $b.9) ($a.10 + $b.10) ($a.11 + $b.11) ($a.12 + $b.12) ($a.13 + $b.13) ($a.14 + $b.14) ($a.15 + $b.15)]
 }
 
-def gf-sub [a: list<int>, b: list<int>]: nothing -> list<int> {
+def gf-sub [a: list<int> b: list<int>]: nothing -> list<int> {
   [($a.0 - $b.0) ($a.1 - $b.1) ($a.2 - $b.2) ($a.3 - $b.3) ($a.4 - $b.4) ($a.5 - $b.5) ($a.6 - $b.6) ($a.7 - $b.7) ($a.8 - $b.8) ($a.9 - $b.9) ($a.10 - $b.10) ($a.11 - $b.11) ($a.12 - $b.12) ($a.13 - $b.13) ($a.14 - $b.14) ($a.15 - $b.15)]
 }
 
@@ -64,13 +64,14 @@ def gf-carry [a: list<int>]: nothing -> list<int> {
   let c13 = ($a.13 + $c12) // 65536
   let c14 = ($a.14 + $c13) // 65536
   let c15 = ($a.15 + $c14) // 65536
+
   [(($a.0 mod 65536) + 38 * $c15) (($a.1 + $c0) mod 65536) (($a.2 + $c1) mod 65536) (($a.3 + $c2) mod 65536) (($a.4 + $c3) mod 65536) (($a.5 + $c4) mod 65536) (($a.6 + $c5) mod 65536) (($a.7 + $c6) mod 65536) (($a.8 + $c7) mod 65536) (($a.9 + $c8) mod 65536) (($a.10 + $c9) mod 65536) (($a.11 + $c10) mod 65536) (($a.12 + $c11) mod 65536) (($a.13 + $c12) mod 65536) (($a.14 + $c13) mod 65536) (($a.15 + $c14) mod 65536)]
 }
 
 # Schoolbook product, tweetnacl's M: line k holds every a[i] * b[j] with
 # i + j == k, so t0..t30 is the 31-limb product. Limb 16 and up sit at 2^256
 # and above and fold down with the 38x wrap.
-def gf-mul [a: list<int>, b: list<int>]: nothing -> list<int> {
+def gf-mul [a: list<int> b: list<int>]: nothing -> list<int> {
   let t0 = $a.0 * $b.0
   let t1 = $a.0 * $b.1 + $a.1 * $b.0
   let t2 = $a.0 * $b.2 + $a.1 * $b.1 + $a.2 * $b.0
@@ -103,6 +104,7 @@ def gf-mul [a: list<int>, b: list<int>]: nothing -> list<int> {
   let t29 = $a.14 * $b.15 + $a.15 * $b.14
   let t30 = $a.15 * $b.15
   let o = [($t0 + 38 * $t16) ($t1 + 38 * $t17) ($t2 + 38 * $t18) ($t3 + 38 * $t19) ($t4 + 38 * $t20) ($t5 + 38 * $t21) ($t6 + 38 * $t22) ($t7 + 38 * $t23) ($t8 + 38 * $t24) ($t9 + 38 * $t25) ($t10 + 38 * $t26) ($t11 + 38 * $t27) ($t12 + 38 * $t28) ($t13 + 38 * $t29) ($t14 + 38 * $t30) $t15]
+
   gf-carry (gf-carry $o)
 }
 
@@ -123,12 +125,14 @@ def gf-chain [a: list<int>]: nothing -> record<z250: list<int>, z11: list<int>> 
   let z_50_0 = gf-mul (gf-sqr-n $z_40_0 10) $z_10_0
   let z_100_0 = gf-mul (gf-sqr-n $z_50_0 50) $z_50_0
   let z_200_0 = gf-mul (gf-sqr-n $z_100_0 100) $z_100_0
-  { z250: (gf-mul (gf-sqr-n $z_200_0 50) $z_50_0), z11: $z11 }
+
+  { z250: (gf-mul (gf-sqr-n $z_200_0 50) $z_50_0) z11: $z11 }
 }
 
 # Inverse by Fermat: a^(p - 2), and p - 2 is 2^255 - 21.
 def gf-inv [a: list<int>]: nothing -> list<int> {
   let c = gf-chain $a
+
   gf-mul (gf-sqr-n $c.z250 5) $c.z11
 }
 
@@ -139,8 +143,9 @@ def gf-pow2523 [a: list<int>]: nothing -> list<int> {
 }
 
 # a^(2^n) by repeated squaring.
-def gf-sqr-n [a: list<int>, n: int]: nothing -> list<int> {
+def gf-sqr-n [a: list<int> n: int]: nothing -> list<int> {
   mut c = $a
+
   # Why 0..<$n and not 1..$n: Nushell reads 1..0 as a descending range and
   # yields [1 0], so n = 0 squared twice and returned a^4 instead of a.
   for _ in 0..<$n { $c = gf-mul $c $c }
@@ -150,17 +155,21 @@ def gf-sqr-n [a: list<int>, n: int]: nothing -> list<int> {
 # Fully reduce to [0, p) and encode as 32 little-endian bytes.
 def gf-pack [n: list<int>]: nothing -> list<int> {
   mut t = gf-carry (gf-carry (gf-carry $n))
+
   # Twice: subtract p with borrow, keep the result when it did not go negative.
   for _ in 0..1 {
     mut m = [(($t | get 0) - 0xffed)]
+
     for i in 1..14 {
       let prev = $m | get ($i - 1)
       let borrow = if $prev < 0 { 1 } else { 0 }
+
       $m = $m | update ($i - 1) ($prev mod 65536) | append (($t | get $i) - 0xffff - $borrow)
     }
     let prev = $m | get 14
     let borrow = if $prev < 0 { 1 } else { 0 }
     let top = ($t | get 15) - 0x7fff - $borrow
+
     $m = $m | update 14 ($prev mod 65536) | append $top
     if $top >= 0 { $t = $m }
   }
@@ -172,11 +181,12 @@ def gf-pack [n: list<int>]: nothing -> list<int> {
 # so it is dropped here and read separately.
 def gf-unpack [bytes: list<int>]: nothing -> list<int> {
   let limbs = $bytes | chunks 2 | each {|c| $c.0 + ($c.1 bit-shl 8) }
+
   $limbs | update 15 (($limbs | get 15) bit-and 0x7fff)
 }
 
 # Both compare fully reduced forms, since one value has many limb encodings.
-def gf-eq [a: list<int>, b: list<int>]: nothing -> bool {
+def gf-eq [a: list<int> b: list<int>]: nothing -> bool {
   (gf-pack $a) == (gf-pack $b)
 }
 
@@ -186,7 +196,7 @@ def gf-parity [a: list<int>]: nothing -> int {
 
 # --- group arithmetic, extended coordinates [x y z t] ----------------------
 
-def point-add [p: list<list<int>>, q: list<list<int>>]: nothing -> list<list<int>> {
+def point-add [p: list<list<int>> q: list<list<int>>]: nothing -> list<list<int>> {
   let a = gf-mul (gf-sub $p.1 $p.0) (gf-sub $q.1 $q.0)
   let b = gf-mul (gf-add $p.0 $p.1) (gf-add $q.0 $q.1)
   let c = gf-mul (gf-mul $p.3 $q.3) $D2
@@ -196,12 +206,14 @@ def point-add [p: list<list<int>>, q: list<list<int>>]: nothing -> list<list<int
   let f = gf-sub $d $c
   let g = gf-add $d $c
   let h = gf-add $b $a
+
   [(gf-mul $e $f) (gf-mul $h $g) (gf-mul $g $f) (gf-mul $e $h)]
 }
 
 # scalar (32 little-endian bytes) times point, double-and-add from the top bit.
-def point-scalarmult [q: list<list<int>>, s: list<int>]: nothing -> list<list<int>> {
+def point-scalarmult [q: list<list<int>> s: list<int>]: nothing -> list<list<int>> {
   mut p = [$GF0 $GF1 $GF1 $GF0]
+
   for i in 255..0 {
     $p = point-add $p $p
     if ((($s | get ($i // 8)) bit-shr ($i mod 8)) bit-and 1) == 1 {
@@ -220,6 +232,7 @@ def point-pack [p: list<list<int>>]: nothing -> list<int> {
   let zi = gf-inv $p.2
   let x = gf-pack (gf-mul $p.0 $zi)
   let y = gf-pack (gf-mul $p.1 $zi)
+
   $y | update 31 (($y | get 31) bit-or (($x | get 0) bit-and 1 | $in bit-shl 7))
 }
 
@@ -247,12 +260,14 @@ def point-unpack-neg [packed: list<int>]: nothing -> any {
   let x = gf-mul $t $den
   # Try the other root when the first one does not square back.
   let x = if (gf-eq (gf-mul (gf-mul $x $x) $den) $num) { $x } else { gf-mul $x $I }
+
   if not (gf-eq (gf-mul (gf-mul $x $x) $den) $num) {
     return null
   }
   # The packed top bit is the sign x should have. Negating when they agree is
   # what makes the returned point -A rather than A.
   let x = if (gf-parity $x) == (($packed | get 31) bit-shr 7) { gf-sub $GF0 $x } else { $x }
+
   [$x $y $GF1 (gf-mul $x $y)]
 }
 
@@ -263,11 +278,14 @@ def point-unpack-neg [packed: list<int>]: nothing -> any {
 # matching the arithmetic shifts there.
 def scalar-modl [x0: list<int>]: nothing -> list<int> {
   mut x = $x0
+
   for i in 63..32 {
     mut carry = 0
     let xi = $x | get $i
+
     for j in ($i - 32)..<($i - 12) {
       let v = ($x | get $j) + $carry - 16 * $xi * ($L | get ($j - ($i - 32)))
+
       $carry = ($v + 128) // 256
       $x = $x | update $j ($v - $carry * 256)
     }
@@ -275,8 +293,10 @@ def scalar-modl [x0: list<int>]: nothing -> list<int> {
   }
   mut carry = 0
   let top = ($x | get 31) // 16
+
   for j in 0..31 {
     let v = ($x | get $j) + $carry - $top * ($L | get $j)
+
     $carry = $v // 256
     $x = $x | update $j ($v - $carry * 256)
   }
@@ -284,8 +304,10 @@ def scalar-modl [x0: list<int>]: nothing -> list<int> {
     $x = $x | update $j (($x | get $j) - $carry * ($L | get $j))
   }
   mut r = []
+
   for i in 0..31 {
     let v = $x | get $i
+
     $x = $x | update ($i + 1) (($x | get ($i + 1)) + ($v // 256))
     $r = $r | append ($v mod 256)
   }
@@ -296,7 +318,8 @@ def scalar-modl [x0: list<int>]: nothing -> list<int> {
 # significant byte is the last one, so compare from the end and let the first
 # byte that differs decide.
 def scalar-below-l [s: list<int>]: nothing -> bool {
-  let diff = $s | reverse | zip ($L | reverse) | where {|p| $p.0 != $p.1 }
+  let diff = $s | reverse | zip ($L | reverse) | where $it.0 != $it.1
+
   if ($diff | is-empty) { false } else { ($diff | first).0 < ($diff | first).1 }
 }
 
@@ -317,11 +340,12 @@ export def keypair [seed: list<int>]: nothing -> record<public: list<int>, secre
   }
   let a = clamp (sha512 $seed | first 32)
   let public = point-pack (point-scalarbase $a)
-  { public: $public, secret: ($seed | append $public) }
+
+  { public: $public secret: ($seed | append $public) }
 }
 
 # Detached 64-byte signature R || S over msg.
-export def sign [msg: list<int>, secret: list<int>]: nothing -> list<int> {
+export def sign [msg: list<int> secret: list<int>]: nothing -> list<int> {
   # Why: a 32-byte secret leaves `skip 32` empty, so the second hash covers
   # R || msg instead of R || public. R stays right and only S goes wrong, which
   # yields a 64-byte signature that looks correct and verifies as false.
@@ -337,6 +361,7 @@ export def sign [msg: list<int>, secret: list<int>]: nothing -> list<int> {
   let h = scalar-modl (sha512 ($big_r | append $public | append $msg))
   # s = r + h * a mod L, accumulated as 64 little-endian entries.
   mut x = $r | append (0..<32 | each { 0 })
+
   for i in 0..31 {
     for j in 0..31 {
       $x = $x | update ($i + $j) (($x | get ($i + $j)) + ($h | get $i) * ($a | get $j))
@@ -359,7 +384,7 @@ export def sign [msg: list<int>, secret: list<int>]: nothing -> list<int> {
 #
 # Returns true or false. A signature that fails is an answer, not an error, so
 # only a wrong-sized argument raises.
-export def verify [msg: list<int>, sig: list<int>, public: list<int>]: nothing -> bool {
+export def verify [msg: list<int> sig: list<int> public: list<int>]: nothing -> bool {
   if ($sig | length) != 64 {
     error make {msg: $"signature must be 64 bytes, got (($sig | length))"}
   }
@@ -368,16 +393,19 @@ export def verify [msg: list<int>, sig: list<int>, public: list<int>]: nothing -
   }
   let big_r = $sig | first 32
   let s = $sig | skip 32
+
   # Why: RFC 8032 section 5.1.7 requires S < L. tweetnacl omits the check, and
   # without it a second signature over the same message also verifies.
   if not (scalar-below-l $s) {
     return false
   }
   let neg_a = point-unpack-neg $public
+
   if $neg_a == null {
     return false
   }
   let h = scalar-modl (sha512 ($big_r | append $public | append $msg))
   let p = point-add (point-scalarmult $neg_a $h) (point-scalarbase $s)
+
   (point-pack $p) == $big_r
 }

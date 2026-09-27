@@ -10,6 +10,7 @@ const SEED = "408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf70"
 @test
 def "public-line matches the OpenSSH form" [] {
   let kp = ed25519 keypair (hex-to-bytes $SEED)
+
   assert equal (sshsig public-line $kp.public) "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB3jUuRM0zNnJZPyM0pzDhgKrykN6JqhbUgN5ZTjTilh"
 }
 
@@ -17,8 +18,10 @@ def "public-line matches the OpenSSH form" [] {
 def "fingerprint matches ssh-keygen -lf" [] {
   let kp = ed25519 keypair (hex-to-bytes $SEED)
   let dir = mktemp --directory
+
   $"(sshsig public-line $kp.public)\n" | save $"($dir)/key.pub"
   let listed = ^ssh-keygen -lf $"($dir)/key.pub" | str trim
+
   rm --recursive $dir
   assert str contains $listed (sshsig fingerprint $kp.public)
   assert equal (sshsig fingerprint $kp.public) "SHA256:Pl5ce4l7GkllU5/k5ThzEWO4KidBNCbhKBaj6oxkZO8"
@@ -35,6 +38,7 @@ def "icon of the four documented vectors matches the spec" [] {
     ["e88ff5f87c809d2921bf2ee8bd3a176d6fc66b9f90230920f1246b5472c22c13" "╚█╯⌘"]
     ["0abd856befd1aaaacfe339bd573dbbcb979d760926ca2e653b8b98e49faa35f9" "╚☻╯♙"]
   ]
+
   for v in $vectors {
     assert equal (sshsig icon (hex-to-bytes $v.public)) $v.icon
   }
@@ -53,6 +57,7 @@ def "sign produces the expected armored block" [] {
     "-----END SSH SIGNATURE-----"
     ""
   ] | str join "\n"
+
   assert equal (sshsig sign (string-to-bytes "hello\n") $kp.secret "file") $expected
 }
 
@@ -60,10 +65,12 @@ def "sign produces the expected armored block" [] {
 def "ssh-keygen -Y verify accepts the signature and rejects a changed message" [] {
   let kp = ed25519 keypair (hex-to-bytes $SEED)
   let dir = mktemp --directory
+
   $"signer (sshsig public-line $kp.public)\n" | save $"($dir)/allowed_signers"
   sshsig sign (string-to-bytes "hello\n") $kp.secret "file" | save $"($dir)/msg.sig"
   let good = "hello\n" | ^ssh-keygen -Y verify -f $"($dir)/allowed_signers" -I signer -n file -s $"($dir)/msg.sig" | complete
   let bad = "hello" | ^ssh-keygen -Y verify -f $"($dir)/allowed_signers" -I signer -n file -s $"($dir)/msg.sig" | complete
+
   rm --recursive $dir
   assert equal $good.exit_code 0 $good.stderr
   assert str contains $good.stdout (sshsig fingerprint $kp.public)
@@ -74,6 +81,7 @@ def "ssh-keygen -Y verify accepts the signature and rejects a changed message" [
 def "verify accepts the block sign just produced" [] {
   let kp = ed25519 keypair (hex-to-bytes $SEED)
   let msg = string-to-bytes "hello\n"
+
   assert equal (sshsig verify $msg (sshsig sign $msg $kp.secret "file") $kp.public "file") true
 }
 
@@ -84,12 +92,14 @@ def "verify accepts the block sign just produced" [] {
 @test
 def "verify accepts a block written by ssh-keygen" [] {
   let k = ssh-keygen-fixture
+
   assert equal (sshsig verify $k.msg $k.block $k.public "file") true
 }
 
 @test
 def "verify rejects a message that changed" [] {
   let k = ssh-keygen-fixture
+
   assert equal (sshsig verify ($k.msg | append 0x21) $k.block $k.public "file") false
 }
 
@@ -97,6 +107,7 @@ def "verify rejects a message that changed" [] {
 def "verify rejects a public key that did not sign the block" [] {
   let k = ssh-keygen-fixture
   let other = $k.public | update 0 (($k.public | get 0) bit-xor 1)
+
   assert equal (sshsig verify $k.msg $k.block $other "file") false
 }
 
@@ -105,6 +116,7 @@ def "verify rejects a public key that did not sign the block" [] {
 @test
 def "verify rejects a block signed under another namespace" [] {
   let k = ssh-keygen-fixture
+
   assert equal (sshsig verify $k.msg $k.email_block $k.public "file") false
 }
 
@@ -114,11 +126,13 @@ def "verify names what is wrong with a malformed block" [] {
   let body = $k.block | lines | skip 1 | drop 1 | str join ""
   let armor = {|b| $"-----BEGIN SSH SIGNATURE-----\n($b)\n-----END SSH SIGNATURE-----\n" }
   let say = {|b| try { sshsig verify $k.msg $b $k.public "file" | into string } catch {|e| $e.msg } }
+
   assert str contains (do $say "just some text") "BEGIN SSH SIGNATURE"
   assert str contains (do $say ($k.block | str replace "END SSH SIGNATURE" "END NOTHING")) "END SSH SIGNATURE"
   assert str contains (do $say (do $armor ($body | str substring 0..100))) "not valid base64"
   assert str contains (do $say (do $armor ($body | str substring 0..99))) "truncated"
   let longer = bytes-to-base64 ((binary-to-bytes ($body | decode base64)) | append [1 2 3])
+
   assert str contains (do $say (do $armor $longer)) "trailing bytes"
 }
 
@@ -127,6 +141,7 @@ def "verify names what is wrong with a malformed block" [] {
 # them reads as one assertion.
 def ssh-keygen-fixture []: nothing -> record {
   let dir = mktemp --directory
+
   run-ssh-keygen [-t ed25519 -N "" -C tester -f $"($dir)/key"]
   "hello from ssh-keygen\n" | save --raw $"($dir)/m.txt"
   "hello from ssh-keygen\n" | save --raw $"($dir)/m2.txt"
@@ -135,7 +150,12 @@ def ssh-keygen-fixture []: nothing -> record {
   # openssh-key-v1: the 15-byte header, three strings, a bare uint32 key count,
   # the public key, then a private section holding two check ints, the key
   # type, the public key again and the 64-byte secret.
-  let raw = open --raw $"($dir)/key" | lines | where {|l| not ($l | str contains "-----") } | str join "" | decode base64 | binary-to-bytes $in
+  let raw = open --raw $"($dir)/key"
+    | lines
+    | where $it !~ '-----'
+    | str join ""
+    | decode base64
+    | binary-to-bytes $in
   let ciphername = string-at $raw 15
   let kdfname = string-at $raw $ciphername.next
   let kdfoptions = string-at $raw $kdfname.next
@@ -144,6 +164,7 @@ def ssh-keygen-fixture []: nothing -> record {
   let keytype = string-at $private.value 8
   let inner_public = string-at $private.value $keytype.next
   let secret = string-at $private.value $inner_public.next
+
   {
     public: $inner_public.value
     secret: $secret.value
@@ -154,9 +175,10 @@ def ssh-keygen-fixture []: nothing -> record {
 }
 
 # One length-prefixed field of an SSH wire blob, and where the next one starts.
-def string-at [bytes: list<int>, at: int]: nothing -> record<value: list<int>, next: int> {
+def string-at [bytes: list<int> at: int]: nothing -> record<value: list<int>, next: int> {
   let len = ($bytes | get $at) * 16777216 + ($bytes | get ($at + 1)) * 65536 + ($bytes | get ($at + 2)) * 256 + ($bytes | get ($at + 3))
-  { value: ($bytes | slice ($at + 4)..<($at + 4 + $len)), next: ($at + 4 + $len) }
+
+  { value: ($bytes | slice ($at + 4)..<($at + 4 + $len)) next: ($at + 4 + $len) }
 }
 
 # Why `complete` rather than -q: a trailing -q is read as another file to sign,
@@ -165,6 +187,7 @@ def string-at [bytes: list<int>, at: int]: nothing -> record<value: list<int>, n
 # chatter off the test output and turns a real failure into a clear message.
 def run-ssh-keygen [args: list<string>]: nothing -> nothing {
   let r = ^ssh-keygen ...$args | complete
+
   if $r.exit_code != 0 {
     error make {msg: $"ssh-keygen ($args | str join ' ') failed: ($r.stderr)"}
   }

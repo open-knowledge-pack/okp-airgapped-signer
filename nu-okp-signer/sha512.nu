@@ -59,8 +59,9 @@ const H0 = [
 # bits that rotate out. Not a def because: 736 rotates per block at 2.6 us
 # per custom command call would cost more than the arithmetic itself. The
 # masks are written out; the FIPS vectors catch a wrong one.
-export def sha512-compress [state: list<int>, block: list<int>]: nothing -> list<int> {
+export def sha512-compress [state: list<int> block: list<int>]: nothing -> list<int> {
   mut w = $block
+
   for t in 16..79 {
     let x = $w | get ($t - 15)
     let y = $w | get ($t - 2)
@@ -72,6 +73,7 @@ export def sha512-compress [state: list<int>, block: list<int>]: nothing -> list
     let b = $w | get ($t - 7)
     let lo = ($a bit-and $MASK) + ($s0 bit-and $MASK) + ($b bit-and $MASK) + ($s1 bit-and $MASK)
     let hi = ($a bit-shr 32) + ($s0 bit-shr 32) + ($b bit-shr 32) + ($s1 bit-shr 32) + ($lo bit-shr 32)
+
     $w = $w | append (($hi bit-shl 32) bit-or ($lo bit-and $MASK))
   }
 
@@ -103,16 +105,19 @@ export def sha512-compress [state: list<int>, block: list<int>]: nothing -> list
     $g = $f
     $f = $e
     let lo = ($d bit-and $MASK) + ($t1l bit-and $MASK)
+
     $e = ((($d bit-shr 32) + $t1h + ($lo bit-shr 32)) bit-shl 32) bit-or ($lo bit-and $MASK)
     $d = $c
     $c = $b
     $b = $a
     let lo = ($t1l bit-and $MASK) + $t2l
+
     $a = (($t1h + $t2h + ($lo bit-shr 32)) bit-shl 32) bit-or ($lo bit-and $MASK)
   }
 
   [$a $b $c $d $e $f $g $h] | zip $state | each {|p|
     let lo = ($p.0 bit-and $MASK) + ($p.1 bit-and $MASK)
+
     ((($p.0 bit-shr 32) + ($p.1 bit-shr 32) + ($lo bit-shr 32)) bit-shl 32) bit-or ($lo bit-and $MASK)
   }
 }
@@ -134,7 +139,7 @@ def words-to-bytes [words: list<int>]: nothing -> list<int> {
 # absorbed `prior` bytes (a multiple of 128), and return the 64-byte digest.
 # HMAC uses this with a precomputed state for the key block, so the per-message
 # cost is two compressions instead of four.
-export def sha512-tail [state: list<int>, bytes: list<int>, prior: int]: nothing -> list<int> {
+export def sha512-tail [state: list<int> bytes: list<int> prior: int]: nothing -> list<int> {
   let n = $bytes | length
   let zeros = if ($n mod 128) < 112 { 111 - ($n mod 128) } else { 239 - ($n mod 128) }
   let bits = ($prior + $n) * 8
@@ -143,6 +148,7 @@ export def sha512-tail [state: list<int>, bytes: list<int>, prior: int]: nothing
     | append (0..<$zeros | each { 0 })
     | append (words-to-bytes [0 $bits])
   mut st = $state
+
   for block in ($padded | chunks 128) {
     $st = sha512-compress $st (bytes-to-words $block)
   }
@@ -157,26 +163,29 @@ export def main [bytes: list<int>]: nothing -> list<int> {
 export def hmac-sha512-key [key: list<int>]: nothing -> record<inner: list<int>, outer: list<int>> {
   let k = if ($key | length) > 128 { main $key } else { $key }
   let k = $k | append (0..<(128 - ($k | length)) | each { 0 })
+
   {
     inner: (sha512-compress $H0 (bytes-to-words ($k | each {|b| $b bit-xor 0x36 })))
     outer: (sha512-compress $H0 (bytes-to-words ($k | each {|b| $b bit-xor 0x5c })))
   }
 }
 
-export def hmac-sha512-keyed [key: record<inner: list<int>, outer: list<int>>, msg: list<int>]: nothing -> list<int> {
+export def hmac-sha512-keyed [key: record<inner: list<int>, outer: list<int>> msg: list<int>]: nothing -> list<int> {
   sha512-tail $key.outer (sha512-tail $key.inner $msg 128) 128
 }
 
-export def hmac-sha512 [key: list<int>, msg: list<int>]: nothing -> list<int> {
+export def hmac-sha512 [key: list<int> msg: list<int>]: nothing -> list<int> {
   hmac-sha512-keyed (hmac-sha512-key $key) $msg
 }
 
-export def pbkdf2-hmac-sha512 [password: list<int>, salt: list<int>, iters: int, dklen: int]: nothing -> list<int> {
+export def pbkdf2-hmac-sha512 [password: list<int> salt: list<int> iters: int dklen: int]: nothing -> list<int> {
   let key = hmac-sha512-key $password
   mut out = []
+
   for i in 1..(($dklen + 63) // 64) {
     mut u = hmac-sha512-keyed $key ($salt | append (uint32-to-bytes $i))
     mut t = $u
+
     for j in 1..<$iters {
       $u = hmac-sha512-keyed $key $u
       $t = $t | zip $u | each {|p| $p.0 bit-xor $p.1 }

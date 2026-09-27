@@ -20,24 +20,28 @@ def "entropy of test vector 2 is all 0xff bytes" [] {
 @test
 def "entropy rejects a wrong word count" [] {
   let msg = try { bip39 entropy ($TV1 | first 23); "" } catch {|e| $e.msg }
+
   assert str contains $msg "expected 24 words"
 }
 
 @test
 def "entropy names the unknown word" [] {
   let msg = try { bip39 entropy ($TV1 | update 2 "abandom"); "" } catch {|e| $e.msg }
+
   assert str contains $msg "word #3"
 }
 
 @test
 def "entropy rejects a checksum mismatch" [] {
   let msg = try { bip39 entropy ($TV1 | update 23 "abandon"); "" } catch {|e| $e.msg }
+
   assert str contains $msg "checksum"
 }
 
 @test
 def "seed refuses a non-ASCII passphrase" [] {
   let msg = try { bip39 seed $TV1 "pässword"; "" } catch {|e| $e.msg }
+
   assert str contains $msg "ASCII"
 }
 
@@ -45,12 +49,14 @@ def "seed refuses a non-ASCII passphrase" [] {
 @test
 def "test vector 1 derives the public key the spec lists" [] {
   let kp = ed25519 keypair (bip39 seed $TV1 | first 32)
+
   assert equal (bytes-to-hex $kp.public) "1de352e44cd333672593f2334a730e180aaf290de89aa16d480de594e34e2961"
 }
 
 @test
 def "test vector 1 with passphrase PROPHET derives the public key the spec lists" [] {
   let kp = ed25519 keypair (bip39 seed $TV1 "PROPHET" | first 32)
+
   assert equal (bytes-to-hex $kp.public) "0abd856befd1aaaacfe339bd573dbbcb979d760926ca2e653b8b98e49faa35f9"
 }
 
@@ -65,7 +71,7 @@ const TV_FALSE = [similar "false" hero ethics vanish camera parent truly stay bl
 @test
 def "every entry of the word list is a string" [] {
   use bip39-words.nu WORDS
-  assert equal ($WORDS | where {|w| ($w | describe) != "string" }) []
+  assert equal ($WORDS | where ($it | describe) != "string") []
 }
 
 @test

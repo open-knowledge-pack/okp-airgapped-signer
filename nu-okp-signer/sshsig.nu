@@ -33,22 +33,23 @@ def ssh-string [bytes: list<int>]: nothing -> list<int> {
 }
 
 # Read one wire string at an offset, and say where the next field starts.
-def ssh-string-read [bytes: list<int>, at: int]: nothing -> record<value: list<int>, next: int> {
+def ssh-string-read [bytes: list<int> at: int]: nothing -> record<value: list<int>, next: int> {
   if ($bytes | length) < ($at + 4) {
     error make {msg: $"truncated SSHSIG block: no length prefix at byte ($at)"}
   }
   let len = ($bytes | get $at) * 16777216 + ($bytes | get ($at + 1)) * 65536 + ($bytes | get ($at + 2)) * 256 + ($bytes | get ($at + 3))
   let start = $at + 4
+
   if ($bytes | length) < ($start + $len) {
     error make {msg: $"truncated SSHSIG block: a field at byte ($at) claims ($len) bytes"}
   }
-  { value: ($bytes | slice $start..<($start + $len)), next: ($start + $len) }
+  { value: ($bytes | slice $start..<($start + $len)) next: ($start + $len) }
 }
 
 # What Ed25519 actually signs. Note what is absent: the version field and the
 # public key, both of which the outer blob carries. Built in one place so
 # `sign` and `verify` cannot drift apart on the layout.
-def signed-blob [namespace: list<int>, hash_alg: list<int>, digest: list<int>]: nothing -> list<int> {
+def signed-blob [namespace: list<int> hash_alg: list<int> digest: list<int>]: nothing -> list<int> {
   string-to-bytes $MAGIC
   | append (ssh-string $namespace)
   | append (ssh-string [])
@@ -94,6 +95,7 @@ const ICON_TABLES = [
 ]
 export def icon [public: list<int>]: nothing -> string {
   let digest = binary-to-bytes (public-digest $public)
+
   $ICON_TABLES
   | enumerate
   | each {|t| $t.item | get (($digest | get $t.index) mod ($t.item | length)) }
@@ -102,7 +104,7 @@ export def icon [public: list<int>]: nothing -> string {
 
 # Armored SSHSIG signature over msg. Ed25519 signs a fixed-size blob holding
 # SHA-512 of the message, so the output size does not depend on the message.
-export def sign [msg: list<int>, secret: list<int>, namespace: string]: nothing -> string {
+export def sign [msg: list<int> secret: list<int> namespace: string]: nothing -> string {
   let public = $secret | skip 32
   let magic = string-to-bytes $MAGIC
   let namespace = namespace-bytes $namespace
@@ -120,13 +122,19 @@ export def sign [msg: list<int>, secret: list<int>, namespace: string]: nothing 
     | append $alg
     | append (ssh-string $sig_blob)
   # ssh-keygen wraps the base64 at 70 columns; match it.
-  let b64 = bytes-to-base64 $blob | split chars | chunks 70 | each { str join } | str join "\n"
+  let b64 = bytes-to-base64 $blob
+    | split chars
+    | chunks 70
+    | each { str join }
+    | str join "\n"
+
   $"-----BEGIN SSH SIGNATURE-----\n($b64)\n-----END SSH SIGNATURE-----\n"
 }
 
 # Strip the two armor lines and decode the base64 body back to bytes.
 def unarmor [armored: string]: nothing -> list<int> {
-  let lines = $armored | lines | each { str trim } | where {|l| $l != "" }
+  let lines = $armored | lines | str trim | where $it != ""
+
   if ($lines | is-empty) or ($lines | first) != "-----BEGIN SSH SIGNATURE-----" {
     error make {msg: "not an SSHSIG block: the BEGIN SSH SIGNATURE line is missing"}
   }
@@ -139,6 +147,7 @@ def unarmor [armored: string]: nothing -> list<int> {
   let decoded = try { $body | decode base64 } catch {
     error make {msg: "the body between the SSHSIG armor lines is not valid base64"}
   }
+
   binary-to-bytes $decoded
 }
 
@@ -160,14 +169,16 @@ def unarmor [armored: string]: nothing -> list<int> {
 # The same caveat as `ed25519 verify`: this shares its code with `sign`, so it
 # is a self-check, not an outside opinion. Use `ssh-keygen -Y verify` to accept
 # a signature from someone else.
-export def verify [msg: list<int>, armored: string, public: list<int>, namespace: string]: nothing -> bool {
+export def verify [msg: list<int> armored: string public: list<int> namespace: string]: nothing -> bool {
   let namespace = namespace-bytes $namespace
   let blob = unarmor $armored
   let magic = string-to-bytes $MAGIC
+
   if ($blob | slice 0..<($magic | length)) != $magic {
     error make {msg: "not an SSHSIG block: the SSHSIG magic is missing"}
   }
   let version = $blob | slice 6..<10
+
   if $version != [0 0 0 1] {
     error make {msg: $"unsupported SSHSIG version, expected 1, got ($version)"}
   }
@@ -176,12 +187,14 @@ export def verify [msg: list<int>, armored: string, public: list<int>, namespace
   let reserved = ssh-string-read $blob $ns_field.next
   let alg_field = ssh-string-read $blob $reserved.next
   let sig_field = ssh-string-read $blob $alg_field.next
+
   if $sig_field.next != ($blob | length) {
     error make {msg: $"trailing bytes after the SSHSIG signature field: (($blob | length) - $sig_field.next) left over"}
   }
   # The signature field holds its own algorithm string then the 64 raw bytes.
   let sig_alg = ssh-string-read $sig_field.value 0
   let sig_bytes = ssh-string-read $sig_field.value $sig_alg.next
+
   if $sig_bytes.next != ($sig_field.value | length) {
     error make {msg: "trailing bytes inside the SSHSIG signature field"}
   }
@@ -201,5 +214,6 @@ export def verify [msg: list<int>, armored: string, public: list<int>, namespace
     return false
   }
   let signed = signed-blob $ns_field.value $alg_field.value (sha512 $msg)
+
   ed25519 verify $signed $sig_bytes.value $public
 }
