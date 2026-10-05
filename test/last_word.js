@@ -80,6 +80,18 @@ const check = (name, actual, expected) => { assert.deepEqual(actual, expected, n
   check('derive with field 24 empty points to the button', $('seedErr').textContent, 'field 24 is empty: "Find word 24" lists the words that complete the other 23');
 
   $('lastWordBtn').click();
+  $('deriveBtn').click();
+  await new Promise((r) => setTimeout(r, 50));
+  check('derive with the list up says to pick from it', $('seedErr').textContent, 'field 24 is empty: tap one of the 8 words listed under the fields');
+  check('and leaves the list in place', $('lastWordBox').classList.contains('hidden'), false);
+
+  type(5, 'xyzzy');
+  $('deriveBtn').click();
+  await new Promise((r) => setTimeout(r, 50));
+  check('an unknown word in 1-23 gets no pointer to the button', $('seedErr').textContent, 'all 24 fields must be filled');
+  type(5, 'abandon');
+
+  $('lastWordBtn').click();
   const buttons = Array.from($('lastWordList').querySelectorAll('button'));
   check('8 candidates shown', buttons.length, 8);
   check('they are the reference candidates', buttons.map((b) => b.textContent), reference(tv1.slice(0, 23)));
@@ -113,7 +125,22 @@ const check = (name, actual, expected) => { assert.deepEqual(actual, expected, n
   for (let i = 0; i < 100 && $('screen2').classList.contains('hidden'); i++) await new Promise((r) => setTimeout(r, 50));
   check('the completed phrase derives tv1', $('testKeyWarn').textContent.includes('tv1'), true);
   $('lockBtn').click();
-  check('lock leaves no list behind', $('lastWordBox').classList.contains('hidden'), true);
+
+  // An open list, then a derivation from the other mode: the list must not
+  // survive it. (Only a mode switch can leave the list up while a key is
+  // derived; any word-mode route to a key fills field 24, which hides it.)
+  $('modeWords').click();
+  for (let i = 0; i < 23; i++) type(i, tv1[i]);
+  $('lastWordBtn').click();
+  check('list up before the Spectre derive', $('lastWordBox').classList.contains('hidden'), false);
+  $('spTv').click();
+  $('deriveBtn').click();
+  for (let i = 0; i < 400 && $('screen2').classList.contains('hidden'); i++) await new Promise((r) => setTimeout(r, 50));
+  check('a Spectre derive took the list away', $('lastWordBox').classList.contains('hidden'), true);
+  check('and emptied it', $('lastWordList').textContent, '');
+  $('lockBtn').click();
+  $('modeWords').click();
+  check('no list after lock and back to the word fields', $('lastWordBox').classList.contains('hidden'), true);
 
   console.log(`last_word: ${checks} checks passed`);
   process.exit(0);

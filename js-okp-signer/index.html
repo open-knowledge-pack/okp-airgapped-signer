@@ -5930,9 +5930,18 @@ async function deriveKey() {
   } else {
     words = wordInputs.map((i) => i.value.trim().toLowerCase());
     if (words.some((w) => !w)) {
-      seedErr.textContent = words.slice(0, 23).every((w) => w)
-        ? 'field 24 is empty: "Find word 24" lists the words that complete the other 23'
-        : 'all 24 fields must be filled';
+      // Only field 24 empty, with 23 list words before it: the case
+      // "Find word 24" exists for. If its list is already up, say to pick
+      // from it rather than to press the button that made it; the list
+      // stays, since the words it was computed from have not changed.
+      // Not when a word in 1-23 is unknown: the button would refuse it.
+      if (words.slice(0, 23).every((w) => w in BIP39_INDEX)) {
+        seedErr.textContent = $('lastWordBox').classList.contains('hidden')
+          ? 'field 24 is empty: "Find word 24" lists the words that complete the other 23'
+          : 'field 24 is empty: tap one of the 8 words listed under the fields';
+      } else {
+        seedErr.textContent = 'all 24 fields must be filled';
+      }
       return;
     }
     const v = await validateMnemonic24(words);

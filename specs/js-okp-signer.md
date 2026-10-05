@@ -121,9 +121,11 @@ Behind a collapsed "Test vectors (development only)" section: three word fill bu
 The page shows all 8 as buttons and does not pick one: each is a valid phrase with its own key, and the choice is the user's.
 A tap puts the word in field 24.
 It is refused while field 24 is filled, while any of fields 1 to 23 is empty, and for a word outside the list, with a message naming the field.
-Any edit to a field takes the list away, since it was computed from the words as they were; so do Clear words, Derive Key and Clear & Lock.
-Derive Key with only field 24 empty points to the button.
-`lastWordCandidates` computes the list; the 23 words' bits are wiped before it returns.
+Any edit to a field takes the list away, since it was computed from the words as they were; so do Clear words, a derivation that succeeds, from either mode, and Clear & Lock.
+Switching mode keeps it, because the fields keep their words.
+Derive Key with only field 24 empty, and list words in fields 1 to 23, points to the button, or, when the list is already up, says to tap one of its words and leaves the list in place.
+With an unknown word among fields 1 to 23 it says only that all 24 fields must be filled, since the button would refuse that word.
+`lastWordCandidates` computes the list; its buffer of the 23 words' bits is wiped before it returns, but the padded copy `sha256` makes of each of its 8 inputs is not, the limit `zeroAll`'s comment names for every message `sha256` hashes.
 The Nushell signer has no such helper.
 
 ### Pasting
