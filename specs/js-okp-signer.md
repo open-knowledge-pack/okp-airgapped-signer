@@ -41,6 +41,11 @@ Add to Home Screen is the only path there without extra software.
 
 `sw.js` is a cache-first service worker with no network fallback, caching the page, the manifest and the icon on first launch.
 It does not cache itself, which is what the version paragraph below rests on.
+The cache is named `gap-signer:` + the worker's scope + `:` + `VERSION`, and activation deletes only caches of the same scope.
+Every app on a github.io host shares one origin and one set of caches, so the earlier cleanup, which deleted every cache but its own, wiped the offline copy of any other app there, and the earlier name, `gap-signer-` + `VERSION`, would have collided with a second deployment of the signer under another path.
+Caches named the old way are left in place, since from the name alone they cannot be told from another deployment's.
+The fetch handler looks only in this version's cache, not across the origin's.
+The reverse is not in this page's hands: another app on the same origin whose worker deletes every cache but its own still deletes this one, and the page then fails to load until a new `VERSION` installs, online too, since there is no network fallback.
 No fallback because the page is self-contained and its CSP loads nothing else, so an uncached request is a bug, not a need.
 Registration is gated on `location.protocol === 'https:'`: under `file://` `navigator.serviceWorker` still exists but `register()` rejects, so the gate is the protocol, not the property, and the `file://` copy behaves exactly as it did before any of this existed.
 A line in the page shows `offline copy: ready, version ...`, or the failure, because a worker that failed to register would otherwise be discovered offline.
