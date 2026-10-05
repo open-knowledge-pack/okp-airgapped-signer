@@ -111,8 +111,20 @@ Whether a field outside any form gets either offer depends on the browser and ha
 Clear & Lock unticks it.
 Its help text says what `main.md` requires it to say.
 
-Buttons: Derive Key, and in this mode Paste full phrase and Clear words.
+Buttons: Derive Key, and in this mode Paste full phrase, Clear words and Find word 24.
 Behind a collapsed "Test vectors (development only)" section: three word fill buttons, the Spectre fill button of the next section, the Verify test vectors button, and the line where that self-test reports.
+
+### Finding word 24
+
+"Find word 24", beside Paste and Clear, lists the words that can complete fields 1 to 23, for a phrase made by hand where only the first 23 words are a free choice.
+23 words are 253 bits; word 24 carries the last 3 bits of entropy and then the 8-bit checksum, so exactly 8 words are valid there, one for each value of those 3 bits.
+The page shows all 8 as buttons and does not pick one: each is a valid phrase with its own key, and the choice is the user's.
+A tap puts the word in field 24.
+It is refused while field 24 is filled, while any of fields 1 to 23 is empty, and for a word outside the list, with a message naming the field.
+Any edit to a field takes the list away, since it was computed from the words as they were; so do Clear words, Derive Key and Clear & Lock.
+Derive Key with only field 24 empty points to the button.
+`lastWordCandidates` computes the list; the 23 words' bits are wiped before it returns.
+The Nushell signer has no such helper.
 
 ### Pasting
 
@@ -292,7 +304,7 @@ These are the requirements only the page can be tested against.
 `sw_gate.js` and `test_purejs.js` are the exceptions on both counts, and `spectre_mode.js` reports through its exit code too, though it needs jsdom — they report through their exit code, and they need nothing installed.
 Nothing here is needed to use, host or audit the page.
 
-What they reach: `verify_as_file.js` hands the page's own output to the real `ssh-keygen -Y verify` in both signing modes, and `verify_sshsig.js` does the same in file mode with the bare text and a flipped byte as the negative cases; `verify_fp.js` compares the fingerprints of the four documented vectors with `ssh-keygen -lf` and their icons with `main.md`; `review_sshsig_crosscheck.js` checks the page's block against what `ssh-keygen -Y sign` produces byte for byte, what a CRLF paste actually signs, and whether the seed or the secret key lands in the DOM after signing; `review_lock_check.js` looks for the public key, the fingerprint and a signature line left in the DOM after the lock; `qr_size.js` measures the QR version a long message produces; `timing.js` measures the pure-JS PBKDF2; `spectre_mode.js` derives the nine word vectors of spectre-web-fork's `test/seed-words.mjs`, every version and both length rules, then drives Spectre mode from the fill button to Sign and Clear & Lock; `test_purejs.js` checks reference copies of SHA-256, HMAC-SHA512 and PBKDF2 against Node's `crypto`, and `verify.js` re-derives the three blank-passphrase public keys with it; neither of those two loads the page.
+What they reach: `verify_as_file.js` hands the page's own output to the real `ssh-keygen -Y verify` in both signing modes, and `verify_sshsig.js` does the same in file mode with the bare text and a flipped byte as the negative cases; `verify_fp.js` compares the fingerprints of the four documented vectors with `ssh-keygen -lf` and their icons with `main.md`; `review_sshsig_crosscheck.js` checks the page's block against what `ssh-keygen -Y sign` produces byte for byte, what a CRLF paste actually signs, and whether the seed or the secret key lands in the DOM after signing; `review_lock_check.js` looks for the public key, the fingerprint and a signature line left in the DOM after the lock; `qr_size.js` measures the QR version a long message produces; `timing.js` measures the pure-JS PBKDF2; `last_word.js` checks the candidates for word 24 against a second implementation on bit strings and Node's `crypto`, for the published phrases and 50 random ones, then drives the button; `spectre_mode.js` derives the nine word vectors of spectre-web-fork's `test/seed-words.mjs`, every version and both length rules, then drives Spectre mode from the fill button to Sign and Clear & Lock; `test_purejs.js` checks reference copies of SHA-256, HMAC-SHA512 and PBKDF2 against Node's `crypto`, and `verify.js` re-derives the three blank-passphrase public keys with it; neither of those two loads the page.
 `sw_gate.js` runs the page's own script blocks in Node's `vm` against a small DOM stub, once under each protocol, and fails unless `https:` registers exactly one worker and `file://` registers none.
 It avoids jsdom on purpose: a check of the offline promise should run where the page runs, on a machine that cannot `npm install`.
 

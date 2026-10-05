@@ -214,6 +214,18 @@
     <div id="wordsMode" class="hidden">
       <h2>1. Enter 24-word BIP39 mnemonic</h2>
       <div id="words" class="row"></div>
+      <!-- Why: a phrase made by hand (dice, coins) has 23 words of free
+           choice and a 24th the checksum constrains. "Find word 24" lists
+           the 8 words that complete the 23; one tap puts the chosen one in
+           field 24. Any edit to a field takes the list away, since it was
+           computed from the words as they were. -->
+      <div id="lastWordBox" class="hidden">
+        <div class="muted">
+          Each of these 8 words completes the 23 above to a valid phrase,
+          and each gives a different key. Tap one to put it in field 24.
+        </div>
+        <div id="lastWordList"></div>
+      </div>
     </div>
     <!-- Why: passphrase is part of BIP39's threat model — same words +
          different passphrase = different key. Field is mandatory in the
@@ -255,6 +267,7 @@
       <span id="wordsButtons" class="hidden">
         <button id="pasteBtn">Paste full phrase</button>
         <button id="clearBtn">Clear words</button>
+        <button id="lastWordBtn">Find word 24</button>
       </span>
     </div>
     <details>
@@ -5333,6 +5346,38 @@ async function validateMnemonic24(words) {
 }
 
 // ---------------------------------------------------------------------------
+// The words that can end a phrase whose first 23 words are given
+// ---------------------------------------------------------------------------
+//
+// 23 words are 253 bits of entropy. Word 24 holds the last 3 bits of entropy
+// and then the 8-bit checksum, so each of the 8 values of those 3 bits gives
+// exactly one valid last word: its index is (x << 8) | SHA-256(entropy)[0].
+// All 8 are valid phrases, and each gives a different key.
+// Caller invariant: 23 words, every one in the list.
+
+function lastWordCandidates(words23) {
+  const bits = new Uint8Array(32); // the entropy; wiped before returning
+  let bitPos = 0;
+  for (let i = 0; i < 23; i++) {
+    const idx = BIP39_INDEX[words23[i]];
+    for (let b = 10; b >= 0; b--) {
+      if ((idx >> b) & 1) bits[bitPos >> 3] |= 1 << (7 - (bitPos & 7));
+      bitPos++;
+    }
+  }
+  // bitPos is 253 here: the 3 bits left are the low 3 bits of the last byte.
+  const out = [];
+  for (let x = 0; x < 8; x++) {
+    bits[31] = (bits[31] & 0xf8) | x;
+    const h = sha256(bits);
+    out.push(BIP39_WORDS[(x << 8) | h[0]]);
+    h.fill(0);
+  }
+  bits.fill(0);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // BIP39 seed derivation (PBKDF2-HMAC-SHA512, 2048 rounds, 64-byte output)
 // ---------------------------------------------------------------------------
 //
@@ -5551,6 +5596,7 @@ for (let i = 0; i < 24; i++) {
 }
 
 function onWordInput(e) {
+  hideLastWords();
   const v = e.target.value.trim().toLowerCase();
   e.target.value = v;
   const wrap = e.target.parentNode;
@@ -5602,7 +5648,40 @@ $('pasteBtn').addEventListener('click', async () => {
   fillWords(text);
 });
 
+function hideLastWords() {
+  $('lastWordList').textContent = '';
+  $('lastWordBox').classList.add('hidden');
+}
+
+$('lastWordBtn').addEventListener('click', () => {
+  hideLastWords();
+  seedErr.textContent = '';
+  const words = wordInputs.map((i) => i.value.trim().toLowerCase());
+  if (words[23]) {
+    seedErr.textContent = 'field 24 is already filled: clear it to list the words that can go there';
+    return;
+  }
+  for (let i = 0; i < 23; i++) {
+    if (!words[i]) { seedErr.textContent = 'fill fields 1 to 23 first: field ' + (i + 1) + ' is empty'; return; }
+    if (!(words[i] in BIP39_INDEX)) { seedErr.textContent = `word #${i + 1} ("${words[i]}") is not in the BIP39 wordlist`; return; }
+  }
+  const list = $('lastWordList');
+  for (const w of lastWordCandidates(words.slice(0, 23))) {
+    const b = document.createElement('button');
+    b.textContent = w;
+    b.addEventListener('click', () => {
+      wordInputs[23].value = w;
+      // The input event marks the field good, and takes the list away.
+      wordInputs[23].dispatchEvent(new Event('input', { bubbles: true }));
+      $('deriveBtn').focus();
+    });
+    list.appendChild(b);
+  }
+  $('lastWordBox').classList.remove('hidden');
+});
+
 $('clearBtn').addEventListener('click', () => {
+  hideLastWords();
   for (const inp of wordInputs) {
     inp.value = '';
     inp.parentNode.classList.remove('bad', 'good');
@@ -5851,7 +5930,9 @@ async function deriveKey() {
   } else {
     words = wordInputs.map((i) => i.value.trim().toLowerCase());
     if (words.some((w) => !w)) {
-      seedErr.textContent = 'all 24 fields must be filled';
+      seedErr.textContent = words.slice(0, 23).every((w) => w)
+        ? 'field 24 is empty: "Find word 24" lists the words that complete the other 23'
+        : 'all 24 fields must be filled';
       return;
     }
     const v = await validateMnemonic24(words);
@@ -5932,6 +6013,7 @@ async function deriveKey() {
 // Wiping here also removes the 100–500 ms window where the fields showed
 // blank under "Deriving…", which reads as data loss.
 function clearSeedInputs() {
+  hideLastWords();
   for (const inp of wordInputs) {
     inp.value = '';
     inp.parentNode.classList.remove('bad', 'good');
