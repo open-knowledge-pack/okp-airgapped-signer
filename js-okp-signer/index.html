@@ -6081,8 +6081,25 @@ $('exportPubBtn').addEventListener('click', () => {
   $('pubQrBox').classList.remove('hidden');
 });
 
+// The signature on screen belongs to the inputs it was made from. Why clear
+// it before validating, not only when a sign fails: an early refusal (empty
+// message, empty namespace, a trailing newline in file mode) used to return
+// with the block of the previous Sign still up, scannable under the error,
+// where it read as the signature of the text now in the box. And why on
+// every edit of the message, the namespace or "Sign as a file": each of
+// them changes the signed bytes, so the block below stops matching them.
+function clearSignature() {
+  $('sigQrImg').removeAttribute('src');
+  $('sigQrPayload').textContent = '';
+  $('sigQrBox').classList.add('hidden');
+}
+$('msg').addEventListener('input', clearSignature);
+$('namespace').addEventListener('input', clearSignature);
+$('asFile').addEventListener('change', clearSignature);
+
 $('signBtn').addEventListener('click', () => {
   $('signErr').textContent = '';
+  clearSignature();
   if (!SECRET_KEY) return;
   let msg = $('msg').value;
   if (!msg) { $('signErr').textContent = 'message is empty'; return; }
@@ -6101,10 +6118,8 @@ $('signBtn').addEventListener('click', () => {
     $('sigQrPayload').textContent = payload;
     $('sigQrBox').classList.remove('hidden');
   } catch (e) {
-    // A block from an earlier Sign must not stay on screen under the error.
-    $('sigQrImg').removeAttribute('src');
-    $('sigQrPayload').textContent = '';
-    $('sigQrBox').classList.add('hidden');
+    // The block of an earlier Sign was cleared above, so nothing scannable
+    // sits under this error.
     $('signErr').textContent = 'signing failed: ' + errorText(e);
   }
 });

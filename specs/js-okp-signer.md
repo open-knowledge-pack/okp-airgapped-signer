@@ -154,7 +154,9 @@ Secret material derived inside the self-test is zeroed before it touches the DOM
 
 Every signature is verified right after it is made, inside `sshsigSign`, with `nacl.sign.detached.verify` under the public key that goes into the block;
 a failure throws and reaches the error line under Sign, so a bad block is refused on the phone instead of found on the desktop one QR round trip later.
-A failed Sign also removes the QR and the block of an earlier Sign, so nothing scannable sits under the error.
+Every Sign removes the QR and the block of the previous one before it checks anything, so a refused or failed Sign leaves nothing scannable under its error.
+Editing the message or the namespace, or ticking or unticking "Sign as a file", removes them too, since each changes the signed bytes and the block on screen would no longer match the text above it.
+Before, only a throw inside signing removed them; a refusal for an empty message, an empty namespace or a trailing newline returned first and left the previous block up, where it read as the signature of the new text.
 The check also proves the public key on screen is the key the secret key belongs to.
 
 ## Screen 1: Spectre identity
