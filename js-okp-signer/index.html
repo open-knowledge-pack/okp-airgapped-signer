@@ -304,12 +304,13 @@
          ../test read #fp byte for byte against ssh-keygen -lf. -->
     <div class="fp"><span id="fp"></span> <span id="icon" class="icon"></span></div>
     <!-- Spectre mode only. The identicon checks the name and the secret the
-         way the Spectre app does; the line names the site, counter and
-         version that went in, since a wrong one gives a different key with
-         the same identicon. The words stay out of the DOM until asked for,
-         and leave it again when the page is hidden. -->
+         way the Spectre app does, so the name itself is not repeated here;
+         the line names the site, counter and version that went in, since a
+         wrong one gives a different key with the same identicon. The words
+         stay out of the DOM until asked for, and leave it again when the
+         page is hidden. -->
     <div id="spectreBox" class="hidden">
-      <div>Spectre identity, with the identicon the Spectre app shows for it:</div>
+      <div>Spectre identity, and the identicon of the name and secret:</div>
       <div class="fp plain"><span id="spIdentity"></span> <span id="spIcon" class="icon"></span></div>
       <button id="revealBtn">Show seed words</button>
       <div id="revealBox" class="fp plain hidden"></div>
@@ -5467,7 +5468,7 @@ async function spectreSeedWords(name, secret, version, site, counter, onProgress
 let SECRET_KEY = null; // Uint8Array(64)  (Ed25519 expanded secret)
 let PUBLIC_KEY = null; // Uint8Array(32)
 let SEED32     = null; // Uint8Array(32)  (BIP39 seed first half; wiped immediately after fromSeed — see deriveKey)
-// Spectre mode only: the inputs (secret aside), the identicon and the 24
+// Spectre mode only: version, site, counter, the identicon and the 24
 // words, for the identity line and the "Show seed words" button on Screen 2.
 // The words are strings, so dropping the reference is all that can be done.
 let SPECTRE    = null;
@@ -5899,7 +5900,7 @@ async function deriveKey() {
     SECRET_KEY = kp.secretKey;
     SPECTRE = spectreMode ? {
       words: words, identicon: identicon,
-      name: sp.name, version: sp.version, site: sp.site, counter: sp.counter,
+      version: sp.version, site: sp.site, counter: sp.counter,
     } : null;
 
     enterScreen2();
@@ -5946,7 +5947,7 @@ function enterScreen2() {
   $('icon').textContent = keyIcon(PUBLIC_KEY);
   hideSeedWords();
   if (SPECTRE) {
-    $('spIdentity').textContent = SPECTRE.name + ' · site ' + SPECTRE.site +
+    $('spIdentity').textContent = 'site ' + SPECTRE.site +
       ' · counter ' + SPECTRE.counter + ' · V' + SPECTRE.version;
     $('spIcon').textContent = SPECTRE.identicon;
     $('spectreBox').classList.remove('hidden');

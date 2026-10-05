@@ -172,7 +172,8 @@ scrypt at these parameters takes 32 MB and about a second on a desktop; on a pho
 It yields to the event loop every 2048 mixing steps, and the Derive button counts up "Deriving… N%" meanwhile.
 The words are checked by `validateMnemonic24` after they are made, so the checksum code of the two paths checks itself.
 
-Screen 2 then shows a second box under the fingerprint: the name, site, counter and version that went in, and the identicon the Spectre app shows beside the name.
+Screen 2 then shows a second box under the fingerprint: the site, counter and version that went in, and the identicon the Spectre app shows beside the name.
+The name itself is not shown: the identicon stands for it.
 The identicon is keyed by the user key, so it checks the name and the secret; the line beside it is there because a wrong site or counter gives a different key under the same identicon.
 A "Show seed words" button puts the 24 words into the DOM on request; a second tap, Clear & Lock, and the page being hidden take them out again.
 Why the page being hidden: the iOS app switcher keeps a snapshot of the last frame, which spectre-web-fork guards against the same way.

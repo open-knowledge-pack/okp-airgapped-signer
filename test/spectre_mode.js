@@ -71,7 +71,7 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
   $('deriveBtn').click();
   await until(() => !$('screen2').classList.contains('hidden'), 'Screen 2');
   check('fingerprint is the one SEED-WORDS.md pins', $('fp').textContent, PINNED_FP);
-  check('identity line', $('spIdentity').textContent, 'Robert Lee Mitchell · site wallet · counter 1 · V3');
+  check('identity line, without the name', $('spIdentity').textContent, 'site wallet · counter 1 · V3');
   check('identicon', $('spIcon').textContent, '═█╗⛄');
   check('test-key banner shown', $('testKeyWarn').classList.contains('hidden'), false);
   check('secret field wiped', $('spSecret').value, '');
