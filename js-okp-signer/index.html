@@ -132,6 +132,26 @@
     max-width: 480px;
     margin-top: 4px;
   }
+  select, input[type=number] {
+    box-sizing: border-box;
+    background: #1a1a1a;
+    color: #eee;
+    border: 1px solid #333;
+    border-radius: 3px;
+    padding: 6px;
+    font: inherit;
+  }
+  #spCounter { width: 9em; }
+  /* Why: .fp breaks anywhere, which suits a fingerprint and cuts names
+     and seed words in half. */
+  .fp.plain { word-break: normal; overflow-wrap: anywhere; }
+  #revealBox { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5em, 1fr)); gap: 2px 8px; }
+  #revealBox.hidden { display: none; }
+  #revealBox .n { color: #666; display: inline-block; width: 2.2em; text-align: right; padding-right: 4px; }
+  label.field { display: block; margin: 6px 0; }
+  .row label.field { margin: 0; }
+  .row label.field.grow { flex: 1; min-width: 8em; }
+  label.field input, label.field select { display: block; margin-top: 2px; }
   hr { border: 0; border-top: 1px solid #222; margin: 16px 0; }
   details summary { cursor: pointer; color: #888; font-size: 12px; }
 </style>
@@ -144,8 +164,57 @@
   <!-- Screen 1: Seed Entry                                         -->
   <!-- ============================================================ -->
   <section id="screen1">
-    <h2>1. Enter 24-word BIP39 mnemonic</h2>
-    <div id="words" class="row"></div>
+    <!-- Why a Spectre mode: the 24 words of spectre-web-fork's "Seed words"
+         result used to reach this page through the clipboard. Here the same
+         derivation runs on the page itself, so the words go from the
+         Spectre inputs to the key in memory and never sit in a text field.
+         First because it is what the page is used for; the fill buttons
+         under "Test vectors" switch to the word fields themselves. -->
+    <div class="muted">
+      Key from:
+      <label><input type="radio" name="mode" id="modeSpectre" checked> Spectre identity</label>
+      <label><input type="radio" name="mode" id="modeWords"> 24 words</label>
+    </div>
+
+    <div id="spectreMode">
+      <h2>1. Spectre identity (the "Seed words" result of spectre-web-fork)</h2>
+      <label class="field">Full name
+        <input id="spName" type="text" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false">
+      </label>
+      <!-- Why password and new-password: the same as the passphrase field
+           below, whose comment says why. -->
+      <label class="field">Spectre secret
+        <input id="spSecret" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </label>
+      <div class="row">
+        <label class="field">Version
+          <select id="spVersion">
+            <option value="0">V0</option>
+            <option value="1">V1</option>
+            <option value="2">V2</option>
+            <option value="3" selected>V3</option>
+          </select>
+        </label>
+        <label class="field grow">Site
+          <input id="spSite" type="text" value="ssh" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+        </label>
+        <!-- min/max/step are the one definition of a valid counter, as in
+             spectre-web-fork: 1 to 2^32 - 1, whole numbers only. -->
+        <label class="field">Counter
+          <input id="spCounter" type="number" min="1" max="4294967295" step="1" value="1" required inputmode="numeric">
+        </label>
+      </div>
+      <div class="muted">
+        Version, site and counter as in the Spectre app; V3 unless the
+        identity is older. The identicon of the name and secret is shown
+        after Derive, beside the key.
+      </div>
+    </div>
+
+    <div id="wordsMode" class="hidden">
+      <h2>1. Enter 24-word BIP39 mnemonic</h2>
+      <div id="words" class="row"></div>
+    </div>
     <!-- Why: passphrase is part of BIP39's threat model — same words +
          different passphrase = different key. Field is mandatory in the
          UI per spec; empty value is the canonical default.
@@ -183,8 +252,10 @@
     <div id="seedErr" class="err"></div>
     <div>
       <button id="deriveBtn" class="primary">Derive Key</button>
-      <button id="pasteBtn">Paste full phrase</button>
-      <button id="clearBtn">Clear words</button>
+      <span id="wordsButtons" class="hidden">
+        <button id="pasteBtn">Paste full phrase</button>
+        <button id="clearBtn">Clear words</button>
+      </span>
     </div>
     <details>
       <summary>Test vectors (development only)</summary>
@@ -199,6 +270,10 @@
       <button id="tv1">Test Vector 1</button>
       <button id="tv2">Test Vector 2</button>
       <button id="tv3">Test Vector 3</button>
+      <!-- The vector of spectre-web-fork's SEED-WORDS.md: Robert Lee
+           Mitchell, banana colored duckling, V3, site "wallet", counter 1.
+           That page also pins the key this signer gives for it. -->
+      <button id="spTv">Spectre test vector</button>
       <button id="selfTestBtn">Verify test vectors</button>
       <!-- Why this button exists: the expected-pubkey hex above is a claim
            that's not enforced anywhere else. If a future change to the
@@ -228,6 +303,17 @@
     <!-- The icon is its own element, not text inside #fp: the probes in
          ../test read #fp byte for byte against ssh-keygen -lf. -->
     <div class="fp"><span id="fp"></span> <span id="icon" class="icon"></span></div>
+    <!-- Spectre mode only. The identicon checks the name and the secret the
+         way the Spectre app does; the line names the site, counter and
+         version that went in, since a wrong one gives a different key with
+         the same identicon. The words stay out of the DOM until asked for,
+         and leave it again when the page is hidden. -->
+    <div id="spectreBox" class="hidden">
+      <div>Spectre identity, with the identicon the Spectre app shows for it:</div>
+      <div class="fp plain"><span id="spIdentity"></span> <span id="spIcon" class="icon"></span></div>
+      <button id="revealBtn">Show seed words</button>
+      <div id="revealBox" class="fp plain hidden"></div>
+    </div>
     <div>
       <button id="exportPubBtn">Export Public Key (QR)</button>
       <button id="lockBtn" class="danger">Clear &amp; Lock</button>
@@ -4859,6 +4945,170 @@ function pbkdf2HmacSha512(password, salt, iters, dkLen) {
   block.fill(0); // the salt, and with it the passphrase
   return out.subarray(0, dkLen);
 }
+
+// ---------------------------------------------------------------------------
+// HMAC-SHA256 — built on `sha256` above. Block size 64. Same shape and the
+// same wipes as hmacSha512; only the Spectre input path uses it.
+// ---------------------------------------------------------------------------
+function hmacSha256(key, msg) {
+  const B = 64;
+  const hashed = key.length > B ? sha256(key) : null;
+  let k = hashed || key;
+  const padded = k.length < B ? new Uint8Array(B) : null;
+  if (padded) {
+    padded.set(k);
+    k = padded;
+  }
+  const opad = new Uint8Array(B);
+  const ipad = new Uint8Array(B);
+  for (let n = 0; n < B; n++) { opad[n] = k[n] ^ 0x5c; ipad[n] = k[n] ^ 0x36; }
+  const inner = new Uint8Array(B + msg.length);
+  inner.set(ipad); inner.set(msg, B);
+  const innerHash = sha256(inner);
+  const outer = new Uint8Array(B + 32);
+  outer.set(opad); outer.set(innerHash, B);
+  const mac = sha256(outer);
+  if (hashed) hashed.fill(0);
+  if (padded) padded.fill(0);
+  opad.fill(0); ipad.fill(0); inner.fill(0); outer.fill(0); innerHash.fill(0);
+  return mac;
+}
+
+// ---------------------------------------------------------------------------
+// PBKDF2-HMAC-SHA256 at one iteration, which is all scrypt asks of it.
+// ---------------------------------------------------------------------------
+function pbkdf2HmacSha256Once(password, salt, dkLen) {
+  const blocks = Math.ceil(dkLen / 32);
+  const out = new Uint8Array(blocks * 32);
+  const block = new Uint8Array(salt.length + 4);
+  block.set(salt);
+  for (let i = 1; i <= blocks; i++) {
+    block[salt.length + 0] = (i >>> 24) & 0xff;
+    block[salt.length + 1] = (i >>> 16) & 0xff;
+    block[salt.length + 2] = (i >>>  8) & 0xff;
+    block[salt.length + 3] =  i         & 0xff;
+    const U = hmacSha256(password, block);
+    out.set(U, (i - 1) * 32);
+    U.fill(0);
+  }
+  block.fill(0);
+  const dk = out.slice(0, dkLen);
+  out.fill(0);
+  return dk;
+}
+
+// ---------------------------------------------------------------------------
+// scrypt (RFC 7914). Only the Spectre input path calls it, always with
+// N = 32768, r = 8, p = 2: 32 MB of scratch and some seconds on a phone.
+// Why async: it yields to the event loop every SCRYPT_CHUNK mixing steps, so
+// the Derive button can show progress and the page does not look frozen.
+// `onProgress` gets the fraction done, 0..1.
+// ---------------------------------------------------------------------------
+const SCRYPT_CHUNK = 2048;
+
+// Salsa20/8 core over 16 words, in place.
+function salsa20_8(B) {
+  let x0 = B[0], x1 = B[1], x2 = B[2], x3 = B[3], x4 = B[4], x5 = B[5], x6 = B[6], x7 = B[7],
+      x8 = B[8], x9 = B[9], x10 = B[10], x11 = B[11], x12 = B[12], x13 = B[13], x14 = B[14], x15 = B[15], u;
+  for (let i = 0; i < 8; i += 2) {
+    u = x0 + x12 | 0; x4 ^= u << 7 | u >>> 25;
+    u = x4 + x0 | 0; x8 ^= u << 9 | u >>> 23;
+    u = x8 + x4 | 0; x12 ^= u << 13 | u >>> 19;
+    u = x12 + x8 | 0; x0 ^= u << 18 | u >>> 14;
+    u = x5 + x1 | 0; x9 ^= u << 7 | u >>> 25;
+    u = x9 + x5 | 0; x13 ^= u << 9 | u >>> 23;
+    u = x13 + x9 | 0; x1 ^= u << 13 | u >>> 19;
+    u = x1 + x13 | 0; x5 ^= u << 18 | u >>> 14;
+    u = x10 + x6 | 0; x14 ^= u << 7 | u >>> 25;
+    u = x14 + x10 | 0; x2 ^= u << 9 | u >>> 23;
+    u = x2 + x14 | 0; x6 ^= u << 13 | u >>> 19;
+    u = x6 + x2 | 0; x10 ^= u << 18 | u >>> 14;
+    u = x15 + x11 | 0; x3 ^= u << 7 | u >>> 25;
+    u = x3 + x15 | 0; x7 ^= u << 9 | u >>> 23;
+    u = x7 + x3 | 0; x11 ^= u << 13 | u >>> 19;
+    u = x11 + x7 | 0; x15 ^= u << 18 | u >>> 14;
+    u = x0 + x3 | 0; x1 ^= u << 7 | u >>> 25;
+    u = x1 + x0 | 0; x2 ^= u << 9 | u >>> 23;
+    u = x2 + x1 | 0; x3 ^= u << 13 | u >>> 19;
+    u = x3 + x2 | 0; x0 ^= u << 18 | u >>> 14;
+    u = x5 + x4 | 0; x6 ^= u << 7 | u >>> 25;
+    u = x6 + x5 | 0; x7 ^= u << 9 | u >>> 23;
+    u = x7 + x6 | 0; x4 ^= u << 13 | u >>> 19;
+    u = x4 + x7 | 0; x5 ^= u << 18 | u >>> 14;
+    u = x10 + x9 | 0; x11 ^= u << 7 | u >>> 25;
+    u = x11 + x10 | 0; x8 ^= u << 9 | u >>> 23;
+    u = x8 + x11 | 0; x9 ^= u << 13 | u >>> 19;
+    u = x9 + x8 | 0; x10 ^= u << 18 | u >>> 14;
+    u = x15 + x14 | 0; x12 ^= u << 7 | u >>> 25;
+    u = x12 + x15 | 0; x13 ^= u << 9 | u >>> 23;
+    u = x13 + x12 | 0; x14 ^= u << 13 | u >>> 19;
+    u = x14 + x13 | 0; x15 ^= u << 18 | u >>> 14;
+  }
+  B[0] += x0; B[1] += x1; B[2] += x2; B[3] += x3; B[4] += x4; B[5] += x5; B[6] += x6; B[7] += x7;
+  B[8] += x8; B[9] += x9; B[10] += x10; B[11] += x11; B[12] += x12; B[13] += x13; B[14] += x14; B[15] += x15;
+}
+
+// BlockMix: X is XY[0, W), Y is XY[W, 2W); the result lands back in X.
+// Y_i goes straight to its final slot, evens first then odds, as RFC 7914
+// orders the output, so no second shuffle is needed.
+function scryptBlockMix(XY, W, r, T) {
+  T.set(XY.subarray(W - 16, W));
+  for (let i = 0; i < 2 * r; i++) {
+    for (let k = 0; k < 16; k++) T[k] ^= XY[i * 16 + k];
+    salsa20_8(T);
+    XY.set(T, W + ((i & 1) * r + (i >> 1)) * 16);
+  }
+  XY.copyWithin(0, W, 2 * W);
+}
+
+async function scrypt(password, salt, N, r, p, dkLen, onProgress) {
+  const W = 32 * r; // words per block
+  const B = pbkdf2HmacSha256Once(password, salt, p * 128 * r);
+  const XY = new Uint32Array(2 * W);
+  const V = new Uint32Array(W * N);
+  const T = new Uint32Array(16);
+  const total = 2 * N * p;
+  let done = 0;
+  const step = async () => {
+    done++;
+    if (done % SCRYPT_CHUNK === 0) {
+      if (onProgress) onProgress(done / total);
+      await new Promise((res) => setTimeout(res, 0));
+    }
+  };
+  try {
+    for (let i = 0; i < p; i++) {
+      const off = i * 128 * r;
+      // Bytes to little-endian words by hand: the platform's own byte order
+      // is not assumed.
+      for (let k = 0; k < W; k++) {
+        const j = off + 4 * k;
+        XY[k] = B[j] | B[j + 1] << 8 | B[j + 2] << 16 | B[j + 3] << 24;
+      }
+      for (let n = 0; n < N; n++) {
+        V.set(XY.subarray(0, W), n * W);
+        scryptBlockMix(XY, W, r, T);
+        await step();
+      }
+      for (let n = 0; n < N; n++) {
+        // Integerify: the first word of the last 64-byte block, mod N
+        // (N is a power of two below 2^32).
+        const j = (XY[W - 16] & (N - 1)) * W;
+        for (let k = 0; k < W; k++) XY[k] ^= V[j + k];
+        scryptBlockMix(XY, W, r, T);
+        await step();
+      }
+      for (let k = 0; k < W; k++) {
+        const j = off + 4 * k;
+        const w = XY[k];
+        B[j] = w & 0xff; B[j + 1] = (w >>> 8) & 0xff; B[j + 2] = (w >>> 16) & 0xff; B[j + 3] = (w >>> 24) & 0xff;
+      }
+    }
+    return pbkdf2HmacSha256Once(password, B, dkLen);
+  } finally {
+    B.fill(0); XY.fill(0); V.fill(0); T.fill(0);
+  }
+}
 </script>
 
 <!--
@@ -5108,12 +5358,119 @@ async function bip39Seed(words, passphrase) {
 }
 
 // ---------------------------------------------------------------------------
+// Spectre identity → 24 words
+// ---------------------------------------------------------------------------
+//
+// The "Seed words" result of spectre-web-fork, so its words never have to
+// cross the clipboard: the same inputs give the same 24 words there and here.
+// The contract is that fork's SEED-WORDS.md, frozen there:
+//
+//   user-salt = "com.lyndir.masterpassword" . uint32be(len(name)) . name
+//   user-key  = scrypt(secret, user-salt, N=32768, r=8, p=2, dkLen=64)
+//   seed-salt = "com.lyndir.masterpassword.seed" . uint32be(len(site)) . site . uint32be(counter)
+//   entropy   = HMAC-SHA-256(user-key, seed-salt)
+//   words     = BIP-39(entropy)
+//
+// len(name) is UTF-16 code units under V0-V2 and bytes under V3; len(site)
+// is code units under V0-V1 and bytes under V2-V3. Every input is taken
+// verbatim, untrimmed and unnormalized, as Spectre takes it.
+// From the words on, the path is the 24-word path: the BIP39 passphrase
+// field, PBKDF2, the first 32 bytes as the Ed25519 seed.
+
+const SPECTRE_SCOPE = 'com.lyndir.masterpassword';
+const SPECTRE_SEED_SCOPE = 'com.lyndir.masterpassword.seed';
+const SPECTRE_IDENTICON_MESSAGE = 'com.lyndir.masterpassword.identicon';
+// The figure Spectre shows beside the name, from spectre-types.js. It is
+// keyed by the user key, so it checks the name and the secret before the
+// site, the counter or the passphrase come in.
+const SPECTRE_IDENTICONS = {
+  leftArm: ['╔', '╚', '╰', '═'],
+  body: ['█', '░', '▒', '▓', '☺', '☻'],
+  rightArm: ['╗', '╝', '╯', '═'],
+  accessory: [
+    '◈', '◎', '◐', '◑', '◒', '◓', '☀', '☁', '☂', '☃', '☄', '★', '☆', '☎', '☏', '⎈', '⌂', '☘', '☢', '☣',
+    '☕', '⌚', '⌛', '⏰', '⚡', '⛄', '⛅', '☔', '♔', '♕', '♖', '♗', '♘', '♙', '♚', '♛', '♜', '♝', '♞', '♟',
+    '♨', '♩', '♪', '♫', '⚐', '⚑', '⚔', '⚖', '⚙', '⚠', '⌘', '⏎', '✄', '✆', '✈', '✉', '✌',
+  ],
+};
+
+function uint32be(n) {
+  return new Uint8Array([(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff]);
+}
+
+async function spectreUserKey(name, secret, version, onProgress) {
+  const nameBytes = utf8(name);
+  const nameLen = version < 3 ? name.length : nameBytes.length;
+  const salt = concatBytes(utf8(SPECTRE_SCOPE), uint32be(nameLen), nameBytes);
+  const secretBytes = utf8(secret);
+  try {
+    return await scrypt(secretBytes, salt, 32768, 8, 2, 64, onProgress);
+  } finally {
+    secretBytes.fill(0);
+  }
+}
+
+function spectreSeedEntropy(userKey, site, counter, version) {
+  const siteBytes = utf8(site);
+  const siteLen = version < 2 ? site.length : siteBytes.length;
+  const salt = concatBytes(utf8(SPECTRE_SEED_SCOPE), uint32be(siteLen), siteBytes, uint32be(counter));
+  return hmacSha256(userKey, salt);
+}
+
+function spectreIdenticon(userKey) {
+  const s = hmacSha256(userKey, utf8(SPECTRE_IDENTICON_MESSAGE));
+  const I = SPECTRE_IDENTICONS;
+  const icon = I.leftArm[s[0] % I.leftArm.length] + I.body[s[1] % I.body.length] +
+    I.rightArm[s[2] % I.rightArm.length] + I.accessory[s[3] % I.accessory.length];
+  s.fill(0);
+  return icon;
+}
+
+// 32 bytes of entropy → 24 words: the entropy, then the first byte of its
+// SHA-256, read as 24 indices of 11 bits each, most significant bit first.
+function entropyToWords(entropy) {
+  const h = sha256(entropy);
+  const bits = new Uint8Array(33);
+  bits.set(entropy);
+  bits[32] = h[0];
+  const words = [];
+  for (let i = 0; i < 24; i++) {
+    let idx = 0;
+    for (let b = 0; b < 11; b++) {
+      const pos = i * 11 + b;
+      idx = (idx << 1) | ((bits[pos >> 3] >> (7 - (pos & 7))) & 1);
+    }
+    words.push(BIP39_WORDS[idx]);
+  }
+  bits.fill(0); h.fill(0);
+  return words;
+}
+
+// The whole Spectre path for one set of inputs. Returns the words and the
+// identicon; the user key and the entropy are wiped before it returns.
+async function spectreSeedWords(name, secret, version, site, counter, onProgress) {
+  const userKey = await spectreUserKey(name, secret, version, onProgress);
+  let entropy = null;
+  try {
+    entropy = spectreSeedEntropy(userKey, site, counter, version);
+    return { words: entropyToWords(entropy), identicon: spectreIdenticon(userKey) };
+  } finally {
+    userKey.fill(0);
+    if (entropy) entropy.fill(0);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Key state — held in module-scope closures, never written to the DOM.
 // ---------------------------------------------------------------------------
 
 let SECRET_KEY = null; // Uint8Array(64)  (Ed25519 expanded secret)
 let PUBLIC_KEY = null; // Uint8Array(32)
 let SEED32     = null; // Uint8Array(32)  (BIP39 seed first half; wiped immediately after fromSeed — see deriveKey)
+// Spectre mode only: the inputs (secret aside), the identicon and the 24
+// words, for the identity line and the "Show seed words" button on Screen 2.
+// The words are strings, so dropping the reference is all that can be done.
+let SPECTRE    = null;
 
 function zeroAll() {
   // What this wipes: the three buffers below. What the derivation path
@@ -5123,7 +5480,9 @@ function zeroAll() {
   // of the BIP39 seed and the 32-byte Ed25519 seed in deriveKey.
   // What nothing here can wipe: the mnemonic, its 24 words and the
   // passphrase, which are JavaScript strings, immutable, and live until the
-  // garbage collector drops them; tweetnacl's own SHA-512 scratch, which
+  // garbage collector drops them, and in Spectre mode the secret string too;
+  // the padded copy `sha256` makes of every message, which in Spectre mode
+  // includes HMAC inputs keyed by the user key; tweetnacl's own SHA-512 scratch, which
   // copies the tail of every message it hashes (the mnemonic's tail past
   // 128 bytes, the salt with the passphrase, each HMAC round's input) and
   // is never zeroed; and any copy the engine made while moving objects.
@@ -5132,6 +5491,7 @@ function zeroAll() {
   if (PUBLIC_KEY) PUBLIC_KEY.fill(0);
   if (SEED32)     SEED32.fill(0);
   SECRET_KEY = PUBLIC_KEY = SEED32 = null;
+  SPECTRE = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -5267,6 +5627,49 @@ function fillWords(text) {
   }
 }
 
+// Spectre mode inputs, read as Spectre reads them: verbatim. The counter
+// field's own constraints decide whether it is valid, as in spectre-web-fork.
+function readSpectreInputs() {
+  const name = $('spName').value;
+  const secret = $('spSecret').value;
+  const site = $('spSite').value;
+  const counterField = $('spCounter');
+  if (!name) return { error: 'the full name is empty' };
+  if (!secret) return { error: 'the Spectre secret is empty' };
+  if (!site) return { error: 'the site is empty' };
+  if (!counterField.value || !counterField.validity.valid) {
+    return { error: 'the counter must be a whole number from 1 to 4294967295' };
+  }
+  return {
+    name: name, secret: secret, site: site,
+    version: parseInt($('spVersion').value, 10),
+    counter: Number(counterField.value),
+  };
+}
+
+function setMode(spectre) {
+  $('modeSpectre').checked = spectre;
+  $('modeWords').checked = !spectre;
+  $('spectreMode').classList.toggle('hidden', !spectre);
+  $('wordsMode').classList.toggle('hidden', spectre);
+  $('wordsButtons').classList.toggle('hidden', spectre);
+  seedErr.textContent = '';
+}
+
+function focusFirstField() {
+  if ($('modeSpectre').checked) ($('spName').value ? $('spSecret') : $('spName')).focus();
+  else wordInputs[0].focus();
+}
+
+$('modeSpectre').addEventListener('change', () => { setMode(true); focusFirstField(); });
+$('modeWords').addEventListener('change', () => { setMode(false); focusFirstField(); });
+// Enter in any Spectre field derives, as Enter in word 24 does.
+for (const id of ['spName', 'spSecret', 'spSite', 'spCounter']) {
+  $(id).addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); deriveKey(); }
+  });
+}
+
 // Test vectors — kept in one place so the fill buttons, the self-test, and
 // the "is this a published test key?" check after Derive all share the same
 // source of truth. If a future change broke the derivation, the self-test
@@ -5314,9 +5717,21 @@ const SIGN_VECTOR = {
 // mnemonic is published. Anyone can sign with the same key." That is equally
 // true for tv1 + 'PROPHET' — both the mnemonic and the passphrase are in this
 // file and in the spec — so the banner has to fire for that key too.
+// The vector of spectre-web-fork's SEED-WORDS.md, which pins the words and
+// the key this page gives for them. The identicon was taken from that fork's
+// own code for the same name and secret.
+const SPECTRE_TEST_VECTOR = {
+  id: 'spectre', name: 'Robert Lee Mitchell', secret: 'banana colored duckling',
+  version: 3, site: 'wallet', counter: 1,
+  words: 'sound average tumble social achieve adapt cement use arm sheriff pear express combine seminar public oppose spider answer woman people leaf wish million snow',
+  identicon: '═█╗⛄',
+  pubHex: 'e88bb3d6fedfa2709d602d71320a604dbc5d6c7ce2be4f2053cce06ee5b5b947',
+};
 const TEST_VECTOR_PUBS = new Map(SELF_TEST_VECTORS.map((v) => [v.pubHex, v.id]));
+TEST_VECTOR_PUBS.set(SPECTRE_TEST_VECTOR.pubHex, SPECTRE_TEST_VECTOR.id);
 for (const v of TEST_VECTORS) {
   $(v.id).addEventListener('click', () => {
+    setMode(false);
     fillWords(v.mnemonic);
     // Why: documented test-vector pubkeys are at empty passphrase. A stale
     // non-empty passphrase from a prior interaction would silently derive a
@@ -5324,6 +5739,18 @@ for (const v of TEST_VECTORS) {
     $('passphrase').value = '';
   });
 }
+
+$('spTv').addEventListener('click', () => {
+  const v = SPECTRE_TEST_VECTOR;
+  setMode(true);
+  $('spName').value = v.name;
+  $('spSecret').value = v.secret;
+  $('spVersion').value = String(v.version);
+  $('spSite').value = v.site;
+  $('spCounter').value = String(v.counter);
+  // The pinned key is at the blank passphrase, as for the word vectors.
+  $('passphrase').value = '';
+});
 
 // Self-test: derive each test vector through the page's actual pipeline and
 // compare the resulting pubkey to the documented hex. Catches regressions
@@ -5368,9 +5795,25 @@ $('selfTestBtn').addEventListener('click', async () => {
       if (got !== v.pubHex) failures.push(`${v.id}: got ${got}, want ${v.pubHex}`);
       if (signed !== null && signed !== SIGN_VECTOR.block) failures.push(`${v.id}: the signature block differs from the documented one`);
     }
+    // The Spectre vector: inputs to words to key, through the same functions
+    // Derive Key calls. Last, because its scrypt is the slow part.
+    {
+      const v = SPECTRE_TEST_VECTOR;
+      const r = await spectreSeedWords(v.name, v.secret, v.version, v.site, v.counter,
+        (f) => { result.textContent = 'running… Spectre scrypt ' + Math.floor(f * 100) + '%'; });
+      const seed64 = await bip39Seed(r.words, '');
+      const seed32 = seed64.slice(0, 32);
+      seed64.fill(0);
+      const kp = nacl.sign.keyPair.fromSeed(seed32);
+      const got = bytesToHex(kp.publicKey);
+      seed32.fill(0); kp.secretKey.fill(0); kp.publicKey.fill(0);
+      if (r.words.join(' ') !== v.words) failures.push(`${v.id}: the 24 words differ from SEED-WORDS.md`);
+      if (r.identicon !== v.identicon) failures.push(`${v.id}: identicon ${r.identicon}, want ${v.identicon}`);
+      if (got !== v.pubHex) failures.push(`${v.id}: got ${got}, want ${v.pubHex}`);
+    }
     if (failures.length === 0) {
       result.className = 'ok';
-      result.textContent = `OK — all ${SELF_TEST_VECTORS.length} fixtures (${TEST_VECTORS.length} empty-passphrase + 1 passphrase wiring) derive the expected pubkey, and tv1 signs the fixed message to the documented block`;
+      result.textContent = `OK — all ${SELF_TEST_VECTORS.length} fixtures (${TEST_VECTORS.length} empty-passphrase + 1 passphrase wiring) derive the expected pubkey, tv1 signs the fixed message to the documented block, and the Spectre vector gives the documented words, identicon and pubkey`;
     } else {
       result.className = 'err';
       result.textContent = 'FAIL: ' + failures.join('; ');
@@ -5398,13 +5841,21 @@ async function deriveKey() {
   const btn = $('deriveBtn');
   if (btn.disabled) return;
   seedErr.textContent = '';
-  const words = wordInputs.map((i) => i.value.trim().toLowerCase());
-  if (words.some((w) => !w)) {
-    seedErr.textContent = 'all 24 fields must be filled';
-    return;
+  const spectreMode = $('modeSpectre').checked;
+  let words = null;
+  let sp = null;
+  if (spectreMode) {
+    sp = readSpectreInputs();
+    if (sp.error) { seedErr.textContent = sp.error; return; }
+  } else {
+    words = wordInputs.map((i) => i.value.trim().toLowerCase());
+    if (words.some((w) => !w)) {
+      seedErr.textContent = 'all 24 fields must be filled';
+      return;
+    }
+    const v = await validateMnemonic24(words);
+    if (!v.ok) { seedErr.textContent = v.error; return; }
   }
-  const v = await validateMnemonic24(words);
-  if (!v.ok) { seedErr.textContent = v.error; return; }
 
   // Read verbatim: no trim, no normalize — NFKD happens inside bip39Seed.
   const passphrase = $('passphrase').value;
@@ -5416,6 +5867,20 @@ async function deriveKey() {
   btn.disabled = true;
   btn.textContent = 'Deriving…';
   try {
+    let identicon = null;
+    if (spectreMode) {
+      // scrypt takes seconds on a phone; the button counts it up so the
+      // page does not look frozen. It yields on its own, from the start.
+      const r = await spectreSeedWords(sp.name, sp.secret, sp.version, sp.site, sp.counter,
+        (f) => { btn.textContent = 'Deriving… ' + Math.floor(f * 100) + '%'; });
+      words = r.words;
+      identicon = r.identicon;
+      // The words were made with their checksum; this checks the two
+      // implementations of that checksum against each other.
+      const v = await validateMnemonic24(words);
+      if (!v.ok) throw new Error('the Spectre words fail their own checksum: ' + v.error);
+      btn.textContent = 'Deriving…';
+    }
     // Step 3: PBKDF2 seed.
     // Why pass passphrase: same words + different passphrase = different
     // key (BIP39's mechanism for multiple identities behind one mnemonic).
@@ -5432,6 +5897,10 @@ async function deriveKey() {
     SEED32 = null;
     PUBLIC_KEY = kp.publicKey;
     SECRET_KEY = kp.secretKey;
+    SPECTRE = spectreMode ? {
+      words: words, identicon: identicon,
+      name: sp.name, version: sp.version, site: sp.site, counter: sp.counter,
+    } : null;
 
     enterScreen2();
   } catch (e) {
@@ -5467,11 +5936,25 @@ function clearSeedInputs() {
     inp.parentNode.classList.remove('bad', 'good');
   }
   $('passphrase').value = '';
+  // The secret is key material; name, version, site and counter are not
+  // without it, and stay for the next derivation, as Spectre keeps the name.
+  $('spSecret').value = '';
 }
 
 function enterScreen2() {
   $('fp').textContent = sshFingerprint(PUBLIC_KEY);
   $('icon').textContent = keyIcon(PUBLIC_KEY);
+  hideSeedWords();
+  if (SPECTRE) {
+    $('spIdentity').textContent = SPECTRE.name + ' · site ' + SPECTRE.site +
+      ' · counter ' + SPECTRE.counter + ' · V' + SPECTRE.version;
+    $('spIcon').textContent = SPECTRE.identicon;
+    $('spectreBox').classList.remove('hidden');
+  } else {
+    $('spIdentity').textContent = '';
+    $('spIcon').textContent = '';
+    $('spectreBox').classList.add('hidden');
+  }
   $('msg').value = '';
   $('signErr').textContent = '';
   $('pubQrBox').classList.add('hidden');
@@ -5484,7 +5967,9 @@ function enterScreen2() {
   const tvId = TEST_VECTOR_PUBS.get(pubHex);
   const warn = $('testKeyWarn');
   if (tvId) {
-    warn.textContent = `⚠ TEST KEY (${tvId}) — this mnemonic is published. Anyone can sign with the same key. Do NOT use for real signing.`;
+    warn.textContent = tvId === SPECTRE_TEST_VECTOR.id
+      ? `⚠ TEST KEY (${tvId}) — this Spectre name and secret are published. Anyone can sign with the same key. Do NOT use for real signing.`
+      : `⚠ TEST KEY (${tvId}) — this mnemonic is published. Anyone can sign with the same key. Do NOT use for real signing.`;
     warn.classList.remove('hidden');
   } else {
     warn.textContent = '';
@@ -5532,8 +6017,43 @@ $('signBtn').addEventListener('click', () => {
   }
 });
 
+// The 24 words of Spectre mode, on request only. They leave the DOM on the
+// second tap, on Clear & Lock, and whenever the page is hidden: the iOS app
+// switcher keeps a snapshot of the last frame, as spectre-web-fork notes.
+function hideSeedWords() {
+  $('revealBox').textContent = '';
+  $('revealBox').classList.add('hidden');
+  $('revealBtn').textContent = 'Show seed words';
+}
+
+$('revealBtn').addEventListener('click', () => {
+  if (!SPECTRE) return;
+  if (!$('revealBox').classList.contains('hidden')) { hideSeedWords(); return; }
+  const box = $('revealBox');
+  box.textContent = '';
+  SPECTRE.words.forEach((w, i) => {
+    const cell = document.createElement('span');
+    const n = document.createElement('span');
+    n.className = 'n';
+    n.textContent = (i + 1) + '.';
+    cell.appendChild(n);
+    cell.appendChild(document.createTextNode(w));
+    box.appendChild(cell);
+  });
+  box.classList.remove('hidden');
+  $('revealBtn').textContent = 'Hide seed words';
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) hideSeedWords();
+});
+
 $('lockBtn').addEventListener('click', () => {
   zeroAll();
+  hideSeedWords();
+  $('spIdentity').textContent = '';
+  $('spIcon').textContent = '';
+  $('spectreBox').classList.add('hidden');
   // Remove the public-key fingerprint, its icon and any QR data URLs from the DOM.
   $('fp').textContent = '';
   $('icon').textContent = '';
@@ -5556,11 +6076,11 @@ $('lockBtn').addEventListener('click', () => {
   seedErr.textContent = '';
   screen2.classList.add('hidden');
   screen1.classList.remove('hidden');
-  wordInputs[0].focus();
+  focusFirstField();
 });
 
-// Focus first word on load.
-wordInputs[0].focus();
+// Focus the first field of the mode on load.
+focusFirstField();
 
 // ---------------------------------------------------------------------------
 // Offline copy (Home Screen web app)

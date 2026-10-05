@@ -49,7 +49,7 @@ The cache version lives in `sw.js`, not in the page, and must be bumped whenever
 `sw.js` is the only file the browser refetches past the cache, so a version inside a cache-first page would never be seen.
 
 There is deliberately no integrity check inside the page: the code that would print a hash is the code being checked, and any script in the same page can patch what it shows.
-The check lives outside the browser — fetch the URL and hash it, and compare with `git show master:js-okp-signer/index.html | sha256sum`.
+The check lives outside the browser — fetch the URL and hash it, and compare with `git show main:js-okp-signer/index.html | sha256sum`.
 That checks the server, not the phone:
 the worker serves the page it cached on the first launch until `VERSION` changes,
 so an app installed while the server held a wrong page keeps it after the server is fixed,
@@ -60,6 +60,7 @@ The README says so and gives the sequence that closes the gap
 ## Crypto in plain JavaScript, not `crypto.subtle`
 
 SHA-256, HMAC-SHA512 and PBKDF2-HMAC-SHA512 are written in plain JavaScript, layered on the SHA-512 that tweetnacl already brings.
+The Spectre mode below adds HMAC-SHA256, a one-iteration PBKDF2-HMAC-SHA256 and scrypt, layered on that SHA-256.
 
 - `crypto.subtle` on `file://` depends on the browser and its version.
   Older iOS Safari and older Android WebViews either omit it or treat `file://` as a non-secure context, where `crypto.subtle` is `undefined` and key derivation silently breaks.
@@ -110,8 +111,8 @@ Whether a field outside any form gets either offer depends on the browser and ha
 Clear & Lock unticks it.
 Its help text says what `main.md` requires it to say.
 
-Buttons: Derive Key, Paste full phrase, Clear words.
-Behind a collapsed "Test vectors (development only)" section: three fill buttons, the Verify test vectors button, and the line where that self-test reports.
+Buttons: Derive Key, and in this mode Paste full phrase and Clear words.
+Behind a collapsed "Test vectors (development only)" section: three word fill buttons, the Spectre fill button of the next section, the Verify test vectors button, and the line where that self-test reports.
 
 ### Pasting
 
@@ -142,9 +143,50 @@ a failure throws and reaches the error line under Sign, so a bad block is refuse
 A failed Sign also removes the QR and the block of an earlier Sign, so nothing scannable sits under the error.
 The check also proves the public key on screen is the key the secret key belongs to.
 
+## Screen 1: Spectre identity
+
+A second way to the 24 words, and the one the page opens on: a radio above the fields switches between "Spectre identity" and "24 words".
+It exists so the words of spectre-web-fork's "Seed words" result reach the signer without the clipboard.
+The page runs that derivation itself, and the words go from the Spectre inputs to the key in memory, never through a text field.
+
+The derivation is spectre-web-fork's `SEED-WORDS.md`, frozen there, and the page follows it byte for byte:
+
+    user-salt = "com.lyndir.masterpassword" . uint32be(len(name)) . name
+    user-key  = scrypt(secret, user-salt, N=32768, r=8, p=2, dkLen=64)
+    seed-salt = "com.lyndir.masterpassword.seed" . uint32be(len(site)) . site . uint32be(counter)
+    entropy   = HMAC-SHA-256(user-key, seed-salt)
+    words     = BIP-39(entropy)
+
+`len(name)` counts UTF-16 code units under V0-V2 and bytes under V3; `len(site)` counts code units under V0-V1 and bytes under V2-V3.
+From the words on, the path is the 24-word path, the BIP39 passphrase field included, so the same words typed into the 24 fields give the same key.
+
+The fields: full name, Spectre secret, version (V0 to V3, V3 by default), site (`ssh` by default), counter (1 by default).
+Every value is taken verbatim, untrimmed and unnormalized, because Spectre takes them that way, and a trim here would derive other words than the Spectre app shows.
+The secret field is `type="password"` with `autocomplete="new-password"`, for the reasons the passphrase field gives above.
+The counter field's `min`, `max` and `step` are the one definition of a valid counter, 1 to 2^32 - 1, as in spectre-web-fork.
+An empty name, secret or site, or an invalid counter, is refused before any work starts.
+Enter in any of the four fields derives.
+
+scrypt, HMAC-SHA256 and the one-iteration PBKDF2-HMAC-SHA256 that scrypt needs are plain JavaScript in the PURE-JS CRYPTO block, for the reasons that block gives.
+scrypt at these parameters takes 32 MB and about a second on a desktop; on a phone it takes some seconds.
+It yields to the event loop every 2048 mixing steps, and the Derive button counts up "Deriving… N%" meanwhile.
+The words are checked by `validateMnemonic24` after they are made, so the checksum code of the two paths checks itself.
+
+Screen 2 then shows a second box under the fingerprint: the name, site, counter and version that went in, and the identicon the Spectre app shows beside the name.
+The identicon is keyed by the user key, so it checks the name and the secret; the line beside it is there because a wrong site or counter gives a different key under the same identicon.
+A "Show seed words" button puts the 24 words into the DOM on request; a second tap, Clear & Lock, and the page being hidden take them out again.
+Why the page being hidden: the iOS app switcher keeps a snapshot of the last frame, which spectre-web-fork guards against the same way.
+
+The "Spectre test vector" fill button, under Test vectors, fills the vector of `SEED-WORDS.md`: Robert Lee Mitchell, banana colored duckling, V3, site `wallet`, counter 1, blank passphrase.
+Verify test vectors runs it too, and checks the words against `SEED-WORDS.md`, the identicon against spectre-web-fork's own code, and the key against the one `SEED-WORDS.md` pins, `e88bb3d6fedfa2709d602d71320a604dbc5d6c7ce2be4f2053cce06ee5b5b947`, fingerprint `SHA256:56GCTKnyQOHsuIQVNHcPmC0vOYjDzFXebn4Q/73N650`.
+That key also fires the test-key banner, worded for a published name and secret.
+The three word fill buttons switch the page to the 24 fields.
+
+The Nushell signer has no Spectre mode: it takes the 24 words, which the Spectre app or this page's "Show seed words" can supply.
+
 ## Screen 2: signing workspace
 
-Top to bottom: the test-key banner when it fires, the fingerprint with the key icon after it, the Export Public Key and Clear & Lock buttons, the public-key QR box when it is shown, a horizontal rule, then the message area, the "Sign as a file" checkbox, the namespace field, Sign, and the signature QR box when it is shown.
+Top to bottom: the test-key banner when it fires, the fingerprint with the key icon after it, the Spectre box in Spectre mode, the Export Public Key and Clear & Lock buttons, the public-key QR box when it is shown, a horizontal rule, then the message area, the "Sign as a file" checkbox, the namespace field, Sign, and the signature QR box when it is shown.
 The rule is the division: identity above it, signing below.
 The key icon of `main.md` sits in the fingerprint box, after the fingerprint, in its own element:
 the probes in `../test/` read the fingerprint element byte for byte against `ssh-keygen -lf`,
@@ -157,7 +199,7 @@ The message area is a `textarea`, which is what makes the newline rules of `main
 Export Public Key renders the OpenSSH public-key line as a QR and prints the same line below it.
 Sign renders the armored SSHSIG block as a QR and prints the same block below it, for copy-paste.
 
-Clear & Lock wipes the key material, empties the fingerprint, its icon, the QR images, the payload texts, the message, the seed fields and the passphrase field, clears the test-key banner and the self-test line, re-ticks "Sign as a file", sets the namespace back to `file`, hides the passphrase again, and returns to Screen 1.
+Clear & Lock wipes the key material, empties the fingerprint, its icon, the QR images, the payload texts, the message, the seed fields, the Spectre secret and the passphrase field, the Spectre box and the words it showed, clears the test-key banner and the self-test line, re-ticks "Sign as a file", sets the namespace back to `file`, hides the passphrase again, and returns to Screen 1.
 
 ## The textarea normalizes line endings, so a CRLF file cannot be signed here
 
@@ -187,7 +229,7 @@ The secret key, the public key and the Ed25519 seed live in top-level variables 
 
 The 32-byte seed variable is zeroed and dropped immediately after `fromSeed` has copied it, rather than waiting for Clear & Lock.
 That removes one copy of two, not the seed: an Ed25519 secret key is the seed followed by the public key, so the first 32 bytes of the secret key are that same seed, and they live until Clear & Lock like the rest of it.
-The mnemonic fields and the passphrase field are cleared when Screen 2 opens, since together they fully derive the key and would otherwise sit in the DOM for the whole session.
+The mnemonic fields, the Spectre secret and the passphrase field are cleared when Screen 2 opens, since together they fully derive the key and would otherwise sit in the DOM for the whole session.
 They are not cleared earlier: an early wipe followed by a throw would leave the user on Screen 1 with 24 blank fields under the error, retyping the phrase to retry, and clearing at the start would also blank the fields for the 100 to 500 ms of "Deriving…", which reads as data loss.
 
 A throw in the derivation, in the self-test or in signing lands in the error line of that screen, prefixed "derivation failed", "FAIL" or "signing failed".
@@ -202,9 +244,12 @@ the 33 index bytes in `validateMnemonic24`, which no longer returns the entropy 
 the password and salt bytes in `bip39Seed`;
 the pads and working buffers in `hmacSha512` and `pbkdf2HmacSha512`
 — under PBKDF2 the pads are SHA-512 of the mnemonic XOR a constant, enough to recompute the seed, and a fresh copy was made 2048 times per derivation;
-the unused half of the BIP39 seed and the 32-byte Ed25519 seed in `deriveKey`.
+the unused half of the BIP39 seed and the 32-byte Ed25519 seed in `deriveKey`;
+in Spectre mode, the secret bytes, scrypt's 32 MB of scratch, the user key and the entropy, in `spectreSeedWords` and below it.
 What nothing in the page can wipe, and the code says so at `zeroAll`:
-the mnemonic, its 24 words and the passphrase, which are JavaScript strings, immutable, alive until the garbage collector drops them;
+the mnemonic, its 24 words and the passphrase, which are JavaScript strings, immutable, alive until the garbage collector drops them, and the Spectre secret likewise;
+in Spectre mode the 24 words also stay referenced until Clear & Lock, for the "Show seed words" button;
+the padded copy `sha256` makes of every message it hashes, HMAC inputs keyed by the user key among them;
 tweetnacl's own SHA-512 scratch, which copies the tail of every message it hashes — the mnemonic's tail past 128 bytes, the salt with the passphrase, each HMAC round's input — and is never zeroed;
 and any copy the engine made while moving objects.
 So the wipes shorten the life of the key material; they do not end it.
@@ -237,16 +282,16 @@ These are the requirements only the page can be tested against.
 - Clear & Lock really clears: after the click, the old fingerprint and its icon are no longer in the DOM.
 - Pasting a 24-word phrase into any field leaves no stale word from an earlier vector.
   A shorter paste is a splice and deliberately leaves the other fields as they were.
-- The Verify test vectors button reports OK for all four documented vectors, and for the fixed tv1 signature block.
+- The Verify test vectors button reports OK for all four documented vectors, for the fixed tv1 signature block, and for the Spectre vector.
 - The test-key banner appears above the fingerprint after deriving from a published mnemonic.
 - Under `file://` the page registers no service worker, while under `https:` it registers one.
   Both halves are the check: the gate is the protocol and `navigator.serviceWorker` is present either way, so a run that registers nothing proves nothing on its own.
 
 `../test/` holds probes that drive the page in jsdom and cover several of these, but it is not a suite: most scripts print what they find for a person to read rather than passing or failing, and running them needs `npm install` and, for the ones that call `ssh-keygen`, OpenSSH on the PATH.
-`sw_gate.js` and `test_purejs.js` are the exceptions on both counts — they report through their exit code, and they need nothing installed.
+`sw_gate.js` and `test_purejs.js` are the exceptions on both counts, and `spectre_mode.js` reports through its exit code too, though it needs jsdom — they report through their exit code, and they need nothing installed.
 Nothing here is needed to use, host or audit the page.
 
-What they reach: `verify_as_file.js` hands the page's own output to the real `ssh-keygen -Y verify` in both signing modes, and `verify_sshsig.js` does the same in file mode with the bare text and a flipped byte as the negative cases; `verify_fp.js` compares the fingerprints of the four documented vectors with `ssh-keygen -lf` and their icons with `main.md`; `review_sshsig_crosscheck.js` checks the page's block against what `ssh-keygen -Y sign` produces byte for byte, what a CRLF paste actually signs, and whether the seed or the secret key lands in the DOM after signing; `review_lock_check.js` looks for the public key, the fingerprint and a signature line left in the DOM after the lock; `qr_size.js` measures the QR version a long message produces; `timing.js` measures the pure-JS PBKDF2; `test_purejs.js` checks reference copies of SHA-256, HMAC-SHA512 and PBKDF2 against Node's `crypto`, and `verify.js` re-derives the three blank-passphrase public keys with it; neither of those two loads the page.
+What they reach: `verify_as_file.js` hands the page's own output to the real `ssh-keygen -Y verify` in both signing modes, and `verify_sshsig.js` does the same in file mode with the bare text and a flipped byte as the negative cases; `verify_fp.js` compares the fingerprints of the four documented vectors with `ssh-keygen -lf` and their icons with `main.md`; `review_sshsig_crosscheck.js` checks the page's block against what `ssh-keygen -Y sign` produces byte for byte, what a CRLF paste actually signs, and whether the seed or the secret key lands in the DOM after signing; `review_lock_check.js` looks for the public key, the fingerprint and a signature line left in the DOM after the lock; `qr_size.js` measures the QR version a long message produces; `timing.js` measures the pure-JS PBKDF2; `spectre_mode.js` derives the nine word vectors of spectre-web-fork's `test/seed-words.mjs`, every version and both length rules, then drives Spectre mode from the fill button to Sign and Clear & Lock; `test_purejs.js` checks reference copies of SHA-256, HMAC-SHA512 and PBKDF2 against Node's `crypto`, and `verify.js` re-derives the three blank-passphrase public keys with it; neither of those two loads the page.
 `sw_gate.js` runs the page's own script blocks in Node's `vm` against a small DOM stub, once under each protocol, and fails unless `https:` registers exactly one worker and `file://` registers none.
 It avoids jsdom on purpose: a check of the offline promise should run where the page runs, on a machine that cannot `npm install`.
 

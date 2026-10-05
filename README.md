@@ -10,6 +10,7 @@ without any professional audit and with no understanding of cryptography.
 Tools can:
 
 - derive a key from a BIP39 mnemonic seed phrase, with optional passphrase
+- (JavaScript only) derive that seed phrase from a Spectre identity, the "Seed words" result of [spectre-web-fork](https://github.com/maxim-uvarov/spectre-web-fork), so the words never pass through the clipboard
 - sign arbitrary text strings
 
 The JavaScript implementation can output QR codes of public keys and signatures.
