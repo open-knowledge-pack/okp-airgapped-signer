@@ -198,6 +198,9 @@ The name itself is not shown: the identicon stands for it.
 The identicon is keyed by the user key, so it checks the name and the secret; the line beside it is there because a wrong site or counter gives a different key under the same identicon.
 A "Show seed words" button puts the 24 words into the DOM on request; a second tap, Clear & Lock, and the page being hidden take them out again.
 Why the page being hidden: the iOS app switcher keeps a snapshot of the last frame, which spectre-web-fork guards against the same way.
+A "Copy seed words" button beside it writes the 24 words to the clipboard as one space-separated line, the form "Paste full phrase" takes, without putting them into the DOM.
+It is an exception to the mode's purpose, made for targets that take the words only as pasted text: the clipboard is readable by other apps and may sync to other devices.
+So Clear & Lock, after a copy, overwrites the clipboard with an empty string; the page cannot read the clipboard back, so it overwrites whatever is there by then, and a clipboard history or a sync that already happened keeps its copy.
 
 The "Spectre test vector" fill button, under Test vectors, fills the vector of `SEED-WORDS.md`: Robert Lee Mitchell, banana colored duckling, V3, site `wallet`, counter 1, blank passphrase.
 Verify test vectors runs it too, and checks the words against `SEED-WORDS.md`, the identicon against spectre-web-fork's own code, and the key against the one `SEED-WORDS.md` pins, `e88bb3d6fedfa2709d602d71320a604dbc5d6c7ce2be4f2053cce06ee5b5b947`, fingerprint `SHA256:56GCTKnyQOHsuIQVNHcPmC0vOYjDzFXebn4Q/73N650`.

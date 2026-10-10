@@ -82,6 +82,14 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
   while (walker.nextNode()) if (walker.currentNode.parentNode.nodeName !== 'SCRIPT') shown.push(walker.currentNode.data);
   check('no word appears anywhere in the page', shown.join(' ').includes('tumble social'), false);
 
+  // jsdom has no clipboard; a stub records what the page writes.
+  const clip = [];
+  Object.defineProperty(win.navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { clip.push(t); } } });
+  $('copyWordsBtn').click();
+  await until(() => clip.length === 1, 'the copy');
+  check('copy puts the 24 words on the clipboard', clip[0], ASCII);
+  check('copy keeps the words out of the DOM', $('revealBox').textContent, '');
+
   $('revealBtn').click();
   check('reveal shows the 24 words', $('revealBox').textContent, ASCII.split(' ').map((w, i) => (i + 1) + '.' + w).join(''));
 
@@ -115,6 +123,9 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
   check('lock hides the Spectre box', $('spectreBox').classList.contains('hidden'), true);
   check('lock clears the identicon', $('spIcon').textContent, '');
   check('lock keeps the name', $('spName').value, 'Robert Lee Mitchell');
+  await until(() => clip.length === 2, 'the clipboard overwrite');
+  check('lock overwrites the clipboard after a copy', clip[1], '');
+  check('lock clears the copy status', $('copyWordsStatus').textContent, '');
 
   // A non-default passphrase changes the key.
   $('spSecret').value = 'banana colored duckling';

@@ -338,6 +338,14 @@
       <div>Spectre identity, and the identicon of the name and secret:</div>
       <div class="fp plain"><span id="spIdentity"></span> <span id="spIcon" class="icon"></span></div>
       <button id="revealBtn">Show seed words</button>
+      <!-- Why a copy button, though the Spectre mode exists to keep the
+           words out of the clipboard: some targets (a wallet app, the
+           Nushell signer) take the words only as pasted text, and retyping
+           24 words is its own risk. The clipboard is readable by other apps
+           and may sync to other devices, so Clear & Lock overwrites it if
+           this button was used. -->
+      <button id="copyWordsBtn">Copy seed words</button>
+      <span id="copyWordsStatus" class="muted"></span>
       <div id="revealBox" class="fp plain hidden"></div>
     </div>
     <div>
@@ -6194,9 +6202,38 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) hideSeedWords();
 });
 
+// The words go to the clipboard as one line, the form "Paste full phrase"
+// takes, and never through the DOM. COPIED_WORDS tells Clear & Lock to
+// overwrite the clipboard; the page cannot read it back, so it overwrites
+// whatever is there by then.
+let COPIED_WORDS = false;
+$('copyWordsBtn').addEventListener('click', async () => {
+  if (!SPECTRE) return;
+  const status = $('copyWordsStatus');
+  status.textContent = '';
+  if (!navigator.clipboard || !navigator.clipboard.writeText) {
+    status.textContent = 'this browser gives the page no clipboard access';
+    return;
+  }
+  // Set before the write: a Clear & Lock that comes while it is pending
+  // must still overwrite.
+  COPIED_WORDS = true;
+  try {
+    await navigator.clipboard.writeText(SPECTRE.words.join(' '));
+    status.textContent = 'copied: Clear & Lock overwrites the clipboard';
+  } catch (e) {
+    status.textContent = 'copy failed: ' + errorText(e);
+  }
+});
+
 $('lockBtn').addEventListener('click', () => {
   zeroAll();
   hideSeedWords();
+  if (COPIED_WORDS && navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText('').catch(() => {});
+  }
+  COPIED_WORDS = false;
+  $('copyWordsStatus').textContent = '';
   $('spIdentity').textContent = '';
   $('spIcon').textContent = '';
   $('spectreBox').classList.add('hidden');

@@ -10,7 +10,7 @@ without any professional audit and with no understanding of cryptography.
 Tools can:
 
 - derive a key from a BIP39 mnemonic seed phrase, with optional passphrase
-- (JavaScript only) derive that seed phrase from a Spectre identity, the "Seed words" result of [spectre-web-fork](https://github.com/maxim-uvarov/spectre-web-fork), so the words never pass through the clipboard
+- (JavaScript only) derive that seed phrase from a Spectre identity, the "Seed words" result of [spectre-web-fork](https://github.com/maxim-uvarov/spectre-web-fork), so the words need not pass through the clipboard (a "Copy seed words" button puts them there on request)
 - (JavaScript only) list the 8 words that can complete a phrase where only the first 23 words were chosen by hand
 - sign arbitrary text strings
 
