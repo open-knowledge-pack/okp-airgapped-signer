@@ -82,6 +82,10 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
   while (walker.nextNode()) if (walker.currentNode.parentNode.nodeName !== 'SCRIPT') shown.push(walker.currentNode.data);
   check('no word appears anywhere in the page', shown.join(' ').includes('tumble social'), false);
 
+  check('the seed words block starts collapsed', $('seedWordsBox').open, false);
+  check('the seed words block is shown in Spectre mode', $('seedWordsBox').classList.contains('hidden'), false);
+  $('seedWordsBox').open = true;
+
   // jsdom has no clipboard; a stub records what the page writes.
   const clip = [];
   Object.defineProperty(win.navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { clip.push(t); } } });
@@ -99,6 +103,7 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
   check('words gone when a QR opens', $('revealBox').textContent, '');
   check('the QR view shows the fingerprint and the icon', $('pubQrFp').textContent, PINNED_FP + ' ' + $('icon').textContent);
   check('the page under the view is inert', $('spectreBox').hasAttribute('inert'), true);
+  check('the seed words block under the view is inert', $('seedWordsBox').hasAttribute('inert'), true);
   check('the view itself is not inert', $('pubQrBox').hasAttribute('inert'), false);
   check('focus moves to Done', doc.activeElement, $('pubQrDone'));
   $('pubQrDone').click();
@@ -112,6 +117,10 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
   check('words gone when the page is hidden', $('revealBox').textContent, '');
   check('reveal button reset', $('revealBtn').textContent, 'Show seed words');
 
+  $('revealBtn').click();
+  $('seedWordsBox').open = false;
+  await until(() => $('revealBox').textContent === '', 'words gone when the seed words block closes');
+
   // Signing works with the Spectre key (the page verifies every signature it makes).
   $('msg').value = 'hello';
   $('signBtn').click();
@@ -121,6 +130,7 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
 
   $('lockBtn').click();
   check('lock hides the Spectre box', $('spectreBox').classList.contains('hidden'), true);
+  check('lock hides the seed words block', $('seedWordsBox').classList.contains('hidden'), true);
   check('lock clears the identicon', $('spIcon').textContent, '');
   check('lock keeps the name', $('spName').value, 'Robert Lee Mitchell');
   await until(() => clip.length === 2, 'the clipboard overwrite');
@@ -151,6 +161,7 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
   $('deriveBtn').click();
   await until(() => !$('screen2').classList.contains('hidden'), 'Screen 2 from words');
   check('no Spectre box in word mode', $('spectreBox').classList.contains('hidden'), true);
+  check('no seed words block in word mode', $('seedWordsBox').classList.contains('hidden'), true);
   $('lockBtn').click();
 
   // The page's own self-test, Spectre vector included.

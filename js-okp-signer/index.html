@@ -331,12 +331,21 @@
     <!-- Spectre mode only. The identicon checks the name and the secret the
          way the Spectre app does, so the name itself is not repeated here;
          the line names the site, counter and version that went in, since a
-         wrong one gives a different key with the same identicon. The words
-         stay out of the DOM until asked for, and leave it again when the
-         page is hidden. -->
+         wrong one gives a different key with the same identicon. -->
     <div id="spectreBox" class="hidden">
       <div>Spectre identity, and the identicon of the name and secret:</div>
       <div class="fp plain"><span id="spIdentity"></span> <span id="spIcon" class="icon"></span></div>
+    </div>
+    <div>
+      <button id="exportPubBtn">Export Public Key (QR)</button>
+      <button id="lockBtn" class="danger">Clear &amp; Lock</button>
+    </div>
+
+    <!-- Spectre mode only, collapsed, below the key's own buttons. The words
+         stay out of the DOM until asked for, and leave it again when the
+         page is hidden or this block is closed. -->
+    <details id="seedWordsBox" class="hidden">
+      <summary>Seed words</summary>
       <button id="revealBtn">Show seed words</button>
       <!-- Why a copy button, though the Spectre mode exists to keep the
            words out of the clipboard: some targets (a wallet app, the
@@ -347,11 +356,7 @@
       <button id="copyWordsBtn">Copy seed words</button>
       <span id="copyWordsStatus" class="muted"></span>
       <div id="revealBox" class="fp plain hidden"></div>
-    </div>
-    <div>
-      <button id="exportPubBtn">Export Public Key (QR)</button>
-      <button id="lockBtn" class="danger">Clear &amp; Lock</button>
-    </div>
+    </details>
 
     <div id="pubQrBox" class="qr-view hidden">
       <button id="pubQrDone">Done</button>
@@ -6067,11 +6072,14 @@ function enterScreen2() {
       ' · counter ' + SPECTRE.counter + ' · V' + SPECTRE.version;
     $('spIcon').textContent = SPECTRE.identicon;
     $('spectreBox').classList.remove('hidden');
+    $('seedWordsBox').classList.remove('hidden');
   } else {
     $('spIdentity').textContent = '';
     $('spIcon').textContent = '';
     $('spectreBox').classList.add('hidden');
+    $('seedWordsBox').classList.add('hidden');
   }
+  $('seedWordsBox').open = false;
   $('msg').value = '';
   $('signErr').textContent = '';
   closeQrViews();
@@ -6180,6 +6188,10 @@ function hideSeedWords() {
   $('revealBtn').textContent = 'Show seed words';
 }
 
+// A closed <details> only hides its content; the words would stay in the DOM.
+$('seedWordsBox').addEventListener('toggle', () => {
+  if (!$('seedWordsBox').open) hideSeedWords();
+});
 $('revealBtn').addEventListener('click', () => {
   if (!SPECTRE) return;
   if (!$('revealBox').classList.contains('hidden')) { hideSeedWords(); return; }
@@ -6241,6 +6253,8 @@ $('lockBtn').addEventListener('click', () => {
   $('spIdentity').textContent = '';
   $('spIcon').textContent = '';
   $('spectreBox').classList.add('hidden');
+  $('seedWordsBox').classList.add('hidden');
+  $('seedWordsBox').open = false;
   // Remove the public-key fingerprint, its icon and any QR data URLs from the DOM.
   $('fp').textContent = '';
   $('icon').textContent = '';

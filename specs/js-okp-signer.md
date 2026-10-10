@@ -196,7 +196,8 @@ The words are checked by `validateMnemonic24` after they are made, so the checks
 Screen 2 then shows a second box under the fingerprint: the site, counter and version that went in, and the identicon the Spectre app shows beside the name.
 The name itself is not shown: the identicon stands for it.
 The identicon is keyed by the user key, so it checks the name and the secret; the line beside it is there because a wrong site or counter gives a different key under the same identicon.
-A "Show seed words" button puts the 24 words into the DOM on request; a second tap, Clear & Lock, and the page being hidden take them out again.
+The two seed-word buttons sit in a "Seed words" block below Export and Clear & Lock, collapsed when Screen 2 opens.
+A "Show seed words" button puts the 24 words into the DOM on request; a second tap, closing the block, Clear & Lock, and the page being hidden take them out again.
 Why the page being hidden: the iOS app switcher keeps a snapshot of the last frame, which spectre-web-fork guards against the same way.
 A "Copy seed words" button beside it writes the 24 words to the clipboard as one space-separated line, the form "Paste full phrase" takes, without putting them into the DOM.
 It is an exception to the mode's purpose, made for targets that take the words only as pasted text: the clipboard is readable by other apps and may sync to other devices.
