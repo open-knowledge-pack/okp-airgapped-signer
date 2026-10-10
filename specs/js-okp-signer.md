@@ -223,7 +223,8 @@ Sign renders the armored SSHSIG block as a QR and prints the same block below it
 
 A QR opens in its own view over the whole screen: Export Public Key opens the public-key QR, a successful Sign opens the signature QR.
 Why: a QR is there to be photographed, and the photo takes the whole screen, so nothing derived from the secret may share it.
-The view shows a Done button, the fingerprint with its key icon, the QR and its text, and nothing else.
+The view shows a Done button, the fingerprint with its key icon, the QR and its text.
+The signature view also shows what the verifier needs: the `ssh-keygen -Y verify` command with the namespace the block was signed under, and the bytes of the message.
 The fingerprint and the icon come from the public key, so the reader of the photo can check the key with them.
 Opening a view hides the seed words and removes them from the DOM, as when the page is hidden.
 Only one view is open at a time, and Done closes it.
