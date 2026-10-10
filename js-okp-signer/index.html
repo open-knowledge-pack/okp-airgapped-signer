@@ -359,7 +359,7 @@
     </details>
 
     <div id="pubQrBox" class="qr-view hidden">
-      <button id="pubQrDone">Done</button>
+      <button id="pubQrDone" class="qr-done">Done</button>
       <h2>Public key QR</h2>
       <!-- The fingerprint and the key icon come from the public key alone,
            and let the reader of the photo check the key. -->
@@ -412,7 +412,7 @@
     <div id="signErr" class="err"></div>
 
     <div id="sigQrBox" class="qr-view hidden">
-      <button id="sigQrDone">Done</button>
+      <button id="sigQrDone" class="qr-done">Done</button>
       <h2>Signature QR</h2>
       <div class="fp"><span id="sigQrFp"></span></div>
       <div class="qr-box"><img id="sigQrImg" alt="signature QR"></div>
@@ -6124,17 +6124,16 @@ function openQrView(box, fpSpan) {
   for (const el of screen2.children) {
     el.toggleAttribute('inert', !el.classList.contains('qr-view'));
   }
-  $('pubQrBox').classList.toggle('hidden', box !== 'pubQrBox');
-  $('sigQrBox').classList.toggle('hidden', box !== 'sigQrBox');
-  $(box === 'pubQrBox' ? 'pubQrDone' : 'sigQrDone').focus();
+  for (const view of document.querySelectorAll('.qr-view')) {
+    view.classList.toggle('hidden', view.id !== box);
+  }
+  $(box).querySelector('.qr-done').focus();
 }
 function closeQrViews() {
-  $('pubQrBox').classList.add('hidden');
-  $('sigQrBox').classList.add('hidden');
+  for (const view of document.querySelectorAll('.qr-view')) view.classList.add('hidden');
   for (const el of screen2.children) el.removeAttribute('inert');
 }
-$('pubQrDone').addEventListener('click', closeQrViews);
-$('sigQrDone').addEventListener('click', closeQrViews);
+for (const done of document.querySelectorAll('.qr-done')) done.addEventListener('click', closeQrViews);
 
 $('exportPubBtn').addEventListener('click', () => {
   if (!PUBLIC_KEY) return;
