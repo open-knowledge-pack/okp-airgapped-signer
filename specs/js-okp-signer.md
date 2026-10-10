@@ -212,7 +212,7 @@ The Nushell signer has no Spectre mode: it takes the 24 words, which the Spectre
 
 ## Screen 2: signing workspace
 
-Top to bottom: the test-key banner when it fires, the fingerprint with the key icon after it, the Spectre box in Spectre mode, the Export Public Key and Clear & Lock buttons, a horizontal rule, then the message area, the "Sign as a file" checkbox, the digest line, the namespace field and Sign.
+Top to bottom: the test-key banner when it fires, the fingerprint with the key icon after it, the Spectre box in Spectre mode, the Export Public Key and Clear & Lock buttons, the collapsed "Seed words" block in Spectre mode, a horizontal rule, then the message area, the "Sign as a file" checkbox, the digest line, the namespace field and Sign.
 The rule is the division: identity above it, signing below.
 The key icon of `main.md` sits in the fingerprint box, after the fingerprint, in its own element:
 the probes in `../test/` read the fingerprint element byte for byte against `ssh-keygen -lf`,
