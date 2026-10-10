@@ -52,6 +52,10 @@ const set = (id, value, event) => {
   set('asFile', true, 'change');
   set('msg', 'B\n', 'input');
   check('no digest for a text Sign refuses', $('msgDigest').textContent, '');
+  signA();
+  check('the signature view shows the digest of the signed bytes', $('sigQrDigest').textContent, '10 characters · sha256 ' + sha('message A\n'));
+  set('msg', 'message B', 'input');
+  check('an edit takes the digest out of the view', $('sigQrDigest').textContent, '');
 
   // Refusals: the inputs are set without events, as a click on Sign right
   // after typing would find them, so only the Sign handler can clear A.

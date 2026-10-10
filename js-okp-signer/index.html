@@ -417,6 +417,9 @@
       <div class="fp"><span id="sigQrFp"></span></div>
       <div class="qr-box"><img id="sigQrImg" alt="signature QR"></div>
       <div class="qr-payload" id="sigQrPayload"></div>
+      <!-- The digest line of the signed bytes, so the photo of this view
+           also names the message the verifier must hold. -->
+      <div class="fp plain" id="sigQrDigest"></div>
       <!-- Why this hint: the QR carries the SSHSIG block (signature + public
            key), but NOT the message text (would balloon the QR for arbitrary
            inputs). The verifier must already have the exact message bytes
@@ -6151,6 +6154,7 @@ $('exportPubBtn').addEventListener('click', () => {
 function clearSignature() {
   $('sigQrImg').removeAttribute('src');
   $('sigQrPayload').textContent = '';
+  $('sigQrDigest').textContent = '';
   closeQrViews();
 }
 $('namespace').addEventListener('input', clearSignature);
@@ -6166,10 +6170,12 @@ function signedText() {
   }
   return { text: msg + '\n' };
 }
+function digestLine(text) {
+  return Array.from(text).length + ' characters · sha256 ' + bytesToHex(sha256(utf8(text)));
+}
 function updateMsgDigest() {
   const { text } = signedText();
-  $('msgDigest').textContent = text === undefined ? '' :
-    Array.from(text).length + ' characters · sha256 ' + bytesToHex(sha256(utf8(text)));
+  $('msgDigest').textContent = text === undefined ? '' : digestLine(text);
 }
 for (const [id, event] of [['msg', 'input'], ['asFile', 'change']]) {
   $(id).addEventListener(event, () => { clearSignature(); updateMsgDigest(); });
@@ -6188,6 +6194,7 @@ $('signBtn').addEventListener('click', () => {
     renderQr($('sigQrImg'), payload);
     $('sigQrPayload').textContent = payload;
     $('sigQrNs').textContent = namespace;
+    $('sigQrDigest').textContent = digestLine(msg);
     openQrView('sigQrBox', 'sigQrFp');
   } catch (e) {
     // The block of an earlier Sign was cleared above, so nothing scannable
@@ -6282,6 +6289,7 @@ $('lockBtn').addEventListener('click', () => {
   $('pubQrFp').textContent = '';
   $('sigQrFp').textContent = '';
   $('sigQrNs').textContent = '';
+  $('sigQrDigest').textContent = '';
   $('msg').value = '';
   $('msgDigest').textContent = '';
   $('asFile').checked = true;

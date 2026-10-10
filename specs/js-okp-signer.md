@@ -232,13 +232,14 @@ Sign renders the armored SSHSIG block as a QR and prints the same block below it
 A QR opens in its own view over the whole screen: Export Public Key opens the public-key QR, a successful Sign opens the signature QR.
 Why: a QR is there to be photographed, and the photo takes the whole screen, so nothing derived from the secret may share it.
 The view shows a Done button, the fingerprint with its key icon, the QR and its text.
-The signature view also shows what the verifier needs: the `ssh-keygen -Y verify` command with the namespace the block was signed under, and the bytes of the message.
+The signature view also shows what the verifier needs: the `ssh-keygen -Y verify` command with the namespace the block was signed under, the rule for which bytes were signed, and the digest line of those bytes.
+The QR does not carry the message, so the verifier gets it out-of-band and checks it against the digest.
 The fingerprint and the icon come from the public key, so the reader of the photo can check the key with them.
 Opening a view hides the seed words and removes them from the DOM, as when the page is hidden.
 Only one view is open at a time, and Done closes it.
 While a view is open, the rest of Screen 2 is `inert` and the focus is on Done: the layer only covers the page, and without that Tab and Enter still reach "Show seed words" under it.
 
-Clear & Lock wipes the key material, empties the fingerprint, its icon, the fingerprints in the QR views, the QR images, the payload texts, the message and its digest line, the seed fields, the Spectre secret and the passphrase field, the Spectre box and the words it showed, clears the test-key banner and the self-test line, re-ticks "Sign as a file", sets the namespace back to `file`, hides the passphrase again, and returns to Screen 1.
+Clear & Lock wipes the key material, empties the fingerprint, its icon, the fingerprints in the QR views, the QR images, the payload texts, the digest in the signature view, the message and its digest line, the seed fields, the Spectre secret and the passphrase field, the Spectre box and the words it showed, clears the test-key banner and the self-test line, re-ticks "Sign as a file", sets the namespace back to `file`, hides the passphrase again, and returns to Screen 1.
 
 ## The textarea normalizes line endings, so a CRLF file cannot be signed here
 
