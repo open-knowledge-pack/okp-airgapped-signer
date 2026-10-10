@@ -43,6 +43,16 @@ const set = (id, value, event) => {
   for (let i = 0; i < 100 && $('screen2').classList.contains('hidden'); i++) await new Promise((r) => setTimeout(r, 50));
   assert.ok(!$('screen2').classList.contains('hidden'), 'derived tv1');
 
+  // The digest line names the bytes Sign signs: in file mode the text plus one LF.
+  const sha = (t) => require('crypto').createHash('sha256').update(t, 'utf8').digest('hex');
+  set('msg', 'héllo', 'input');
+  check('digest of the file form', $('msgDigest').textContent, '6 characters · sha256 ' + sha('héllo\n'));
+  set('asFile', false, 'change');
+  check('digest of the raw form', $('msgDigest').textContent, '5 characters · sha256 ' + sha('héllo'));
+  set('asFile', true, 'change');
+  set('msg', 'B\n', 'input');
+  check('no digest for a text Sign refuses', $('msgDigest').textContent, '');
+
   // Refusals: the inputs are set without events, as a click on Sign right
   // after typing would find them, so only the Sign handler can clear A.
   const refusals = [

@@ -212,7 +212,7 @@ The Nushell signer has no Spectre mode: it takes the 24 words, which the Spectre
 
 ## Screen 2: signing workspace
 
-Top to bottom: the test-key banner when it fires, the fingerprint with the key icon after it, the Spectre box in Spectre mode, the Export Public Key and Clear & Lock buttons, a horizontal rule, then the message area, the "Sign as a file" checkbox, the namespace field and Sign.
+Top to bottom: the test-key banner when it fires, the fingerprint with the key icon after it, the Spectre box in Spectre mode, the Export Public Key and Clear & Lock buttons, a horizontal rule, then the message area, the "Sign as a file" checkbox, the digest line, the namespace field and Sign.
 The rule is the division: identity above it, signing below.
 The key icon of `main.md` sits in the fingerprint box, after the fingerprint, in its own element:
 the probes in `../test/` read the fingerprint element byte for byte against `ssh-keygen -lf`,
@@ -221,6 +221,10 @@ The label above the box calls it a typo check for the passphrase,
 because the heading over it says "Device identity" and the spec forbids presenting the icon as one.
 
 The message area is a `textarea`, which is what makes the newline rules of `main.md` matter here: what is signed is its value as UTF-8.
+Under the "Sign as a file" checkbox, a line shows the number of characters and the SHA-256 of the exact bytes Sign would sign, with the LF of file mode included.
+In file mode the digest equals `sha256sum` of the file, so the sender can show the same digest and the signer compares the two.
+Why: a message that arrives by QR goes into the box through iOS "Scan Text" or a paste, and a dropped space or a changed quote looks the same on screen.
+The line is empty when Sign would refuse the text.
 
 Export Public Key renders the OpenSSH public-key line as a QR and prints the same line below it.
 Sign renders the armored SSHSIG block as a QR and prints the same block below it, for copy-paste.
@@ -234,7 +238,7 @@ Opening a view hides the seed words and removes them from the DOM, as when the p
 Only one view is open at a time, and Done closes it.
 While a view is open, the rest of Screen 2 is `inert` and the focus is on Done: the layer only covers the page, and without that Tab and Enter still reach "Show seed words" under it.
 
-Clear & Lock wipes the key material, empties the fingerprint, its icon, the fingerprints in the QR views, the QR images, the payload texts, the message, the seed fields, the Spectre secret and the passphrase field, the Spectre box and the words it showed, clears the test-key banner and the self-test line, re-ticks "Sign as a file", sets the namespace back to `file`, hides the passphrase again, and returns to Screen 1.
+Clear & Lock wipes the key material, empties the fingerprint, its icon, the fingerprints in the QR views, the QR images, the payload texts, the message and its digest line, the seed fields, the Spectre secret and the passphrase field, the Spectre box and the words it showed, clears the test-key banner and the self-test line, re-ticks "Sign as a file", sets the namespace back to `file`, hides the passphrase again, and returns to Screen 1.
 
 ## The textarea normalizes line endings, so a CRLF file cannot be signed here
 

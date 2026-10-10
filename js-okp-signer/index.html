@@ -389,6 +389,11 @@
       with a newline (what <code>nu-multiproof</code> writes). Untick to sign
       the text exactly as typed.
     </label>
+    <!-- Why: a message that arrives by QR is typed in by iOS "Scan Text" or
+         a paste, and a dropped space or a curly quote looks the same on
+         screen. The sender computes the same digest of the same bytes
+         (`sha256sum` of the file), and the two are compared by eye. -->
+    <div id="msgDigest" class="muted"></div>
     <!-- Why a namespace field: SSHSIG bakes the namespace into the signed
          bytes, and each verifier asks for one by name. "file" is what
          `ssh-keygen -Y sign -n file` uses for arbitrary files, so it is the
@@ -6081,6 +6086,7 @@ function enterScreen2() {
   }
   $('seedWordsBox').open = false;
   $('msg').value = '';
+  $('msgDigest').textContent = '';
   $('signErr').textContent = '';
   closeQrViews();
 
@@ -6147,25 +6153,36 @@ function clearSignature() {
   $('sigQrPayload').textContent = '';
   closeQrViews();
 }
-$('msg').addEventListener('input', clearSignature);
 $('namespace').addEventListener('input', clearSignature);
-$('asFile').addEventListener('change', clearSignature);
+
+// The text Sign signs, or why Sign refuses it. Why one function: the digest
+// line must name exactly the bytes Sign would use.
+function signedText() {
+  const msg = $('msg').value;
+  if (!msg) return { err: 'message is empty' };
+  if (!$('asFile').checked) return { text: msg };
+  if (msg.endsWith('\n')) {
+    return { err: 'the text already ends with a newline: remove it, or untick "Sign as a file" to sign it as typed' };
+  }
+  return { text: msg + '\n' };
+}
+function updateMsgDigest() {
+  const { text } = signedText();
+  $('msgDigest').textContent = text === undefined ? '' :
+    Array.from(text).length + ' characters · sha256 ' + bytesToHex(sha256(utf8(text)));
+}
+for (const [id, event] of [['msg', 'input'], ['asFile', 'change']]) {
+  $(id).addEventListener(event, () => { clearSignature(); updateMsgDigest(); });
+}
 
 $('signBtn').addEventListener('click', () => {
   $('signErr').textContent = '';
   clearSignature();
   if (!SECRET_KEY) return;
-  let msg = $('msg').value;
-  if (!msg) { $('signErr').textContent = 'message is empty'; return; }
+  const { text: msg, err } = signedText();
+  if (err) { $('signErr').textContent = err; return; }
   const namespace = $('namespace').value.trim();
   if (!namespace) { $('signErr').textContent = 'namespace is empty: "file" for a file, "git" for a commit object'; return; }
-  if ($('asFile').checked) {
-    if (msg.endsWith('\n')) {
-      $('signErr').textContent = 'the text already ends with a newline: remove it, or untick "Sign as a file" to sign it as typed';
-      return;
-    }
-    msg += '\n';
-  }
   try {
     const payload = sshsigSign(utf8(msg), SECRET_KEY, PUBLIC_KEY, namespace);
     renderQr($('sigQrImg'), payload);
@@ -6266,6 +6283,7 @@ $('lockBtn').addEventListener('click', () => {
   $('sigQrFp').textContent = '';
   $('sigQrNs').textContent = '';
   $('msg').value = '';
+  $('msgDigest').textContent = '';
   $('asFile').checked = true;
   $('namespace').value = 'file';
   $('showPassphrase').checked = false;
