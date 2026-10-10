@@ -82,11 +82,18 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
   while (walker.nextNode()) if (walker.currentNode.parentNode.nodeName !== 'SCRIPT') shown.push(walker.currentNode.data);
   check('no word appears anywhere in the page', shown.join(' ').includes('tumble social'), false);
 
-  $('exportPubBtn').click();
-  check('public key line is the one SEED-WORDS.md pins', $('pubQrPayload').textContent, PINNED_PUB);
-
   $('revealBtn').click();
   check('reveal shows the 24 words', $('revealBox').textContent, ASCII.split(' ').map((w, i) => (i + 1) + '.' + w).join(''));
+
+  $('exportPubBtn').click();
+  check('public key line is the one SEED-WORDS.md pins', $('pubQrPayload').textContent, PINNED_PUB);
+  check('the QR view is a layer over the page', $('pubQrBox').classList.contains('qr-view'), true);
+  check('words gone when a QR opens', $('revealBox').textContent, '');
+  check('the QR view shows the fingerprint and the icon', $('pubQrFp').textContent, PINNED_FP + ' ' + $('icon').textContent);
+  $('pubQrDone').click();
+  check('Done closes the QR view', $('pubQrBox').classList.contains('hidden'), true);
+
+  $('revealBtn').click();
   Object.defineProperty(doc, 'hidden', { configurable: true, get: () => true });
   doc.dispatchEvent(new win.Event('visibilitychange'));
   delete doc.hidden;

@@ -208,7 +208,7 @@ The Nushell signer has no Spectre mode: it takes the 24 words, which the Spectre
 
 ## Screen 2: signing workspace
 
-Top to bottom: the test-key banner when it fires, the fingerprint with the key icon after it, the Spectre box in Spectre mode, the Export Public Key and Clear & Lock buttons, the public-key QR box when it is shown, a horizontal rule, then the message area, the "Sign as a file" checkbox, the namespace field, Sign, and the signature QR box when it is shown.
+Top to bottom: the test-key banner when it fires, the fingerprint with the key icon after it, the Spectre box in Spectre mode, the Export Public Key and Clear & Lock buttons, a horizontal rule, then the message area, the "Sign as a file" checkbox, the namespace field and Sign.
 The rule is the division: identity above it, signing below.
 The key icon of `main.md` sits in the fingerprint box, after the fingerprint, in its own element:
 the probes in `../test/` read the fingerprint element byte for byte against `ssh-keygen -lf`,
@@ -221,7 +221,14 @@ The message area is a `textarea`, which is what makes the newline rules of `main
 Export Public Key renders the OpenSSH public-key line as a QR and prints the same line below it.
 Sign renders the armored SSHSIG block as a QR and prints the same block below it, for copy-paste.
 
-Clear & Lock wipes the key material, empties the fingerprint, its icon, the QR images, the payload texts, the message, the seed fields, the Spectre secret and the passphrase field, the Spectre box and the words it showed, clears the test-key banner and the self-test line, re-ticks "Sign as a file", sets the namespace back to `file`, hides the passphrase again, and returns to Screen 1.
+A QR opens in its own view over the whole screen: Export Public Key opens the public-key QR, a successful Sign opens the signature QR.
+Why: a QR is there to be photographed, and the photo takes the whole screen, so nothing derived from the secret may share it.
+The view shows a Done button, the fingerprint with its key icon, the QR and its text, and nothing else.
+The fingerprint and the icon come from the public key, so the reader of the photo can check the key with them.
+Opening a view hides the seed words and removes them from the DOM, as when the page is hidden.
+Only one view is open at a time, and Done closes it.
+
+Clear & Lock wipes the key material, empties the fingerprint, its icon, the fingerprints in the QR views, the QR images, the payload texts, the message, the seed fields, the Spectre secret and the passphrase field, the Spectre box and the words it showed, clears the test-key banner and the self-test line, re-ticks "Sign as a file", sets the namespace back to `file`, hides the passphrase again, and returns to Screen 1.
 
 ## The textarea normalizes line endings, so a CRLF file cannot be signed here
 

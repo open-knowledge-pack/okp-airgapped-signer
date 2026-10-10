@@ -124,6 +124,18 @@
     margin: 8px 0;
   }
   .qr-box img { display: block; image-rendering: pixelated; }
+  /* Why a full-screen view: a QR is there to be photographed, and the photo
+     takes the whole screen. On its own layer nothing derived from the secret
+     shares the frame: not the Spectre line, not the seed words. */
+  .qr-view {
+    position: fixed;
+    top: 0; right: 0; bottom: 0; left: 0;
+    z-index: 10;
+    overflow-y: auto;
+    background: #111;
+    padding: 16px;
+    box-sizing: border-box;
+  }
   .qr-payload {
     font-size: 11px;
     color: #888;
@@ -333,8 +345,12 @@
       <button id="lockBtn" class="danger">Clear &amp; Lock</button>
     </div>
 
-    <div id="pubQrBox" class="hidden">
+    <div id="pubQrBox" class="qr-view hidden">
+      <button id="pubQrDone">Done</button>
       <h2>Public key QR</h2>
+      <!-- The fingerprint and the key icon come from the public key alone,
+           and let the reader of the photo check the key. -->
+      <div class="fp"><span id="pubQrFp"></span></div>
       <div class="qr-box"><img id="pubQrImg" alt="public key QR"></div>
       <div class="qr-payload" id="pubQrPayload"></div>
     </div>
@@ -377,8 +393,10 @@
     </div>
     <div id="signErr" class="err"></div>
 
-    <div id="sigQrBox" class="hidden">
+    <div id="sigQrBox" class="qr-view hidden">
+      <button id="sigQrDone">Done</button>
       <h2>Signature QR</h2>
+      <div class="fp"><span id="sigQrFp"></span></div>
       <div class="qr-box"><img id="sigQrImg" alt="signature QR"></div>
       <div class="qr-payload" id="sigQrPayload"></div>
       <!-- Why this hint: the QR carries the SSHSIG block (signature + public
@@ -6073,12 +6091,23 @@ function enterScreen2() {
   screen2.classList.remove('hidden');
 }
 
+// One QR view at a time, over the whole screen. The seed words leave the
+// DOM first, so a photo or a screenshot of the view cannot hold them.
+function openQrView(box, fpSpan) {
+  hideSeedWords();
+  $(fpSpan).textContent = $('fp').textContent + ' ' + $('icon').textContent;
+  $('pubQrBox').classList.toggle('hidden', box !== 'pubQrBox');
+  $('sigQrBox').classList.toggle('hidden', box !== 'sigQrBox');
+}
+$('pubQrDone').addEventListener('click', () => $('pubQrBox').classList.add('hidden'));
+$('sigQrDone').addEventListener('click', () => $('sigQrBox').classList.add('hidden'));
+
 $('exportPubBtn').addEventListener('click', () => {
   if (!PUBLIC_KEY) return;
   const payload = sshPubLine(PUBLIC_KEY);
   renderQr($('pubQrImg'), payload);
   $('pubQrPayload').textContent = payload;
-  $('pubQrBox').classList.remove('hidden');
+  openQrView('pubQrBox', 'pubQrFp');
 });
 
 // The signature on screen belongs to the inputs it was made from. Why clear
@@ -6116,7 +6145,7 @@ $('signBtn').addEventListener('click', () => {
     const payload = sshsigSign(utf8(msg), SECRET_KEY, PUBLIC_KEY, namespace);
     renderQr($('sigQrImg'), payload);
     $('sigQrPayload').textContent = payload;
-    $('sigQrBox').classList.remove('hidden');
+    openQrView('sigQrBox', 'sigQrFp');
   } catch (e) {
     // The block of an earlier Sign was cleared above, so nothing scannable
     // sits under this error.
@@ -6168,6 +6197,8 @@ $('lockBtn').addEventListener('click', () => {
   $('sigQrImg').removeAttribute('src');
   $('pubQrPayload').textContent = '';
   $('sigQrPayload').textContent = '';
+  $('pubQrFp').textContent = '';
+  $('sigQrFp').textContent = '';
   $('msg').value = '';
   $('asFile').checked = true;
   $('namespace').value = 'file';
