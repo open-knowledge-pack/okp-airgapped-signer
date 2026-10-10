@@ -408,8 +408,7 @@
            signature for a message that looks identical. -->
       <div class="muted">
         QR contains an OpenSSH signature block (verify with
-        <code>ssh-keygen -Y verify -n &lt;namespace&gt;</code>, the namespace
-        chosen above). It does not contain the
+        <code>ssh-keygen -Y verify -n <span id="sigQrNs"></span></code>). It does not contain the
         message. The verifier needs the exact message bytes out-of-band:
         line endings become LF; with "Sign as a file" ticked the bytes are
         the text plus one trailing LF, unticked they are the text exactly as
@@ -6155,6 +6154,7 @@ $('signBtn').addEventListener('click', () => {
     const payload = sshsigSign(utf8(msg), SECRET_KEY, PUBLIC_KEY, namespace);
     renderQr($('sigQrImg'), payload);
     $('sigQrPayload').textContent = payload;
+    $('sigQrNs').textContent = namespace;
     openQrView('sigQrBox', 'sigQrFp');
   } catch (e) {
     // The block of an earlier Sign was cleared above, so nothing scannable
@@ -6209,6 +6209,7 @@ $('lockBtn').addEventListener('click', () => {
   $('sigQrPayload').textContent = '';
   $('pubQrFp').textContent = '';
   $('sigQrFp').textContent = '';
+  $('sigQrNs').textContent = '';
   $('msg').value = '';
   $('asFile').checked = true;
   $('namespace').value = 'file';

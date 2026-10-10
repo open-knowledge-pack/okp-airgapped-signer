@@ -109,6 +109,7 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
   $('signBtn').click();
   check('no sign error', $('signErr').textContent, '');
   check('signature block made', $('sigQrPayload').textContent.startsWith('-----BEGIN SSH SIGNATURE-----'), true);
+  check('the view names the namespace', $('sigQrNs').textContent, 'file');
 
   $('lockBtn').click();
   check('lock hides the Spectre box', $('spectreBox').classList.contains('hidden'), true);
