@@ -227,6 +227,7 @@ The view shows a Done button, the fingerprint with its key icon, the QR and its 
 The fingerprint and the icon come from the public key, so the reader of the photo can check the key with them.
 Opening a view hides the seed words and removes them from the DOM, as when the page is hidden.
 Only one view is open at a time, and Done closes it.
+While a view is open, the rest of Screen 2 is `inert` and the focus is on Done: the layer only covers the page, and without that Tab and Enter still reach "Show seed words" under it.
 
 Clear & Lock wipes the key material, empties the fingerprint, its icon, the fingerprints in the QR views, the QR images, the payload texts, the message, the seed fields, the Spectre secret and the passphrase field, the Spectre box and the words it showed, clears the test-key banner and the self-test line, re-ticks "Sign as a file", sets the namespace back to `file`, hides the passphrase again, and returns to Screen 1.
 

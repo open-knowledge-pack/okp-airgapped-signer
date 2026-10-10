@@ -6067,8 +6067,7 @@ function enterScreen2() {
   }
   $('msg').value = '';
   $('signErr').textContent = '';
-  $('pubQrBox').classList.add('hidden');
-  $('sigQrBox').classList.add('hidden');
+  closeQrViews();
 
   // If the derived pub matches a documented BIP39 test-vector pub, surface
   // a loud warning. Catches both "user clicked Test Vector N and forgot"
@@ -6093,14 +6092,25 @@ function enterScreen2() {
 
 // One QR view at a time, over the whole screen. The seed words leave the
 // DOM first, so a photo or a screenshot of the view cannot hold them.
+// Why inert on the rest of Screen 2: the layer only covers it, and Tab and
+// Enter still reach the buttons under it, "Show seed words" among them.
 function openQrView(box, fpSpan) {
   hideSeedWords();
   $(fpSpan).textContent = $('fp').textContent + ' ' + $('icon').textContent;
+  for (const el of screen2.children) {
+    el.toggleAttribute('inert', !el.classList.contains('qr-view'));
+  }
   $('pubQrBox').classList.toggle('hidden', box !== 'pubQrBox');
   $('sigQrBox').classList.toggle('hidden', box !== 'sigQrBox');
+  $(box === 'pubQrBox' ? 'pubQrDone' : 'sigQrDone').focus();
 }
-$('pubQrDone').addEventListener('click', () => $('pubQrBox').classList.add('hidden'));
-$('sigQrDone').addEventListener('click', () => $('sigQrBox').classList.add('hidden'));
+function closeQrViews() {
+  $('pubQrBox').classList.add('hidden');
+  $('sigQrBox').classList.add('hidden');
+  for (const el of screen2.children) el.removeAttribute('inert');
+}
+$('pubQrDone').addEventListener('click', closeQrViews);
+$('sigQrDone').addEventListener('click', closeQrViews);
 
 $('exportPubBtn').addEventListener('click', () => {
   if (!PUBLIC_KEY) return;
@@ -6120,7 +6130,7 @@ $('exportPubBtn').addEventListener('click', () => {
 function clearSignature() {
   $('sigQrImg').removeAttribute('src');
   $('sigQrPayload').textContent = '';
-  $('sigQrBox').classList.add('hidden');
+  closeQrViews();
 }
 $('msg').addEventListener('input', clearSignature);
 $('namespace').addEventListener('input', clearSignature);
@@ -6204,8 +6214,7 @@ $('lockBtn').addEventListener('click', () => {
   $('namespace').value = 'file';
   $('showPassphrase').checked = false;
   $('passphrase').type = 'password';
-  $('pubQrBox').classList.add('hidden');
-  $('sigQrBox').classList.add('hidden');
+  closeQrViews();
   $('testKeyWarn').textContent = '';
   $('testKeyWarn').classList.add('hidden');
   $('selfTestResult').textContent = '';

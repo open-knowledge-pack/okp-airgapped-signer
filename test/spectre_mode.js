@@ -90,8 +90,12 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
   check('the QR view is a layer over the page', $('pubQrBox').classList.contains('qr-view'), true);
   check('words gone when a QR opens', $('revealBox').textContent, '');
   check('the QR view shows the fingerprint and the icon', $('pubQrFp').textContent, PINNED_FP + ' ' + $('icon').textContent);
+  check('the page under the view is inert', $('spectreBox').hasAttribute('inert'), true);
+  check('the view itself is not inert', $('pubQrBox').hasAttribute('inert'), false);
+  check('focus moves to Done', doc.activeElement, $('pubQrDone'));
   $('pubQrDone').click();
   check('Done closes the QR view', $('pubQrBox').classList.contains('hidden'), true);
+  check('Done makes the page live again', $('spectreBox').hasAttribute('inert'), false);
 
   $('revealBtn').click();
   Object.defineProperty(doc, 'hidden', { configurable: true, get: () => true });
