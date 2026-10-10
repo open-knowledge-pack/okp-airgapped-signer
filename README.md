@@ -11,6 +11,7 @@ Tools can:
 
 - derive a key from a BIP39 mnemonic seed phrase, with optional passphrase
 - (JavaScript only) derive that seed phrase from a Spectre identity, the "Seed words" result of [spectre-web-fork](https://github.com/maxim-uvarov/spectre-web-fork), so the words never pass through the clipboard
+- (JavaScript only) list the 8 words that can complete a phrase where only the first 23 words were chosen by hand
 - sign arbitrary text strings
 
 The JavaScript implementation can output QR codes of public keys and signatures.
@@ -45,6 +46,20 @@ git show master:js-okp-signer/index.html | sha256sum
 The shortcut hashes what the server serves now, not what the phone has cached, so a match proves the server and says nothing about the installed app.
 The service worker keeps the page it fetched on the first launch until `VERSION` changes, so an app installed while the site served a wrong page keeps that page after the site is fixed, and the check still passes.
 To make the phone hold the page just checked, remove the Home Screen app and add it again right after a match: the new install fetches the page the server serves at that moment.
+
+The page opens in Spectre mode;
+a radio switches it to the 24 word fields.
+
+### Code reused from Spectre
+
+The Spectre mode reuses the work of [Spectre](https://spectre.app),
+which is Free Software under GPLv3:
+
+- the user key: Spectre's scrypt derivation with the `com.lyndir.masterpassword` salt, written again in plain JavaScript;
+- the identicon: the glyph tables, copied from `js/spectre/spectre-types.js` of spectre-web-fork, and Spectre's rule for selecting a glyph from each table;
+- the 24 words: the "Seed words" derivation of spectre-web-fork, a fork of [Spectre's web app](https://gitlab.com/spectre.app/web).
+  Its `SEED-WORDS.md` is the contract,
+  and the page follows it byte for byte.
 
 ## Nushell signer: `nu-okp-signer/`
 
