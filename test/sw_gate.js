@@ -65,6 +65,9 @@ function registrationsUnder(protocol) {
       },
       createElement: element,
       addEventListener() {},
+      // The page finds its QR views and their Done buttons by class.
+      querySelector: () => null,
+      querySelectorAll: () => [],
     },
     navigator: {
       // Present under both protocols, as it is in a real browser: the page's
