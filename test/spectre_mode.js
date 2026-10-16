@@ -82,6 +82,7 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
   while (walker.nextNode()) if (walker.currentNode.parentNode.nodeName !== 'SCRIPT') shown.push(walker.currentNode.data);
   check('no word appears anywhere in the page', shown.join(' ').includes('tumble social'), false);
 
+  check('the Spectre identity block starts collapsed', $('spectreBox').open, false);
   check('the seed words block starts collapsed', $('seedWordsBox').open, false);
   check('the seed words block is shown in Spectre mode', $('seedWordsBox').classList.contains('hidden'), false);
   $('seedWordsBox').open = true;

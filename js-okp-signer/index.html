@@ -189,7 +189,7 @@
     </div>
 
     <div id="spectreMode">
-      <h2>1. Spectre identity (the "Seed words" result of spectre-web-fork)</h2>
+      <h2>1. Spectre identity</h2>
       <label class="field">Full name
         <input id="spName" type="text" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false">
       </label>
@@ -218,8 +218,7 @@
       </div>
       <div class="muted">
         Version, site and counter as in the Spectre app; V3 unless the
-        identity is older. The identicon of the name and secret is shown
-        after Derive, beside the key.
+        identity is older.
       </div>
     </div>
 
@@ -250,29 +249,19 @@
          and the "show" box below keeps that: tick it to read back what
          was typed. Typing while it is ticked is typing into a text field
          again, learning included. -->
-    <h2>BIP39 passphrase (optional — leave blank if you don't use one)</h2>
+    <h2>BIP39 passphrase (optional)</h2>
     <!-- Why autocomplete="new-password": a password field invites the
          browser's password manager, which syncs. "off" is widely ignored on
          password fields. "new-password" says "a new password, as when
          creating an account", so saved passwords are not offered; a browser
          may instead offer to generate one, or to save what was typed, and
-         the label's "decline" covers both. Whether a field outside any form
+         the note under Derive, "decline", covers both. Whether a field outside any form
          gets either offer is up to the browser and untested here. -->
     <input id="passphrase" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false">
     <label class="muted">
       <input type="checkbox" id="showPassphrase">
-      Show the passphrase, to check it for typos. Type it hidden: a phone
-      keyboard learns from a visible field and may sync what it learned.
-      If the browser offers to save the passphrase, decline: a saved
-      password syncs too.
+      Show, to check for typos
     </label>
-    <div class="muted">
-      Blank is fine and is the canonical default (matches the documented
-      test vectors). Any non-empty passphrase becomes part of the key and
-      must be remembered alongside the 24 words — losing it loses the key,
-      no recovery. The same words with a different passphrase produce a
-      different key.
-    </div>
     <div id="seedErr" class="err"></div>
     <div>
       <button id="deriveBtn" class="primary">Derive Key</button>
@@ -281,6 +270,13 @@
         <button id="clearBtn">Clear words</button>
         <button id="lastWordBtn">Find word 24</button>
       </span>
+    </div>
+    <!-- Why below Derive: above it, the notes push the button off a phone screen. -->
+    <div class="muted">
+      Blank is the default. A passphrase is part of the key: lose it and
+      the key is lost. Type it hidden: a phone keyboard learns from a
+      visible field and may sync it. If the browser offers to save it,
+      decline: a saved password syncs too.
     </div>
     <details>
       <summary>Test vectors (development only)</summary>
@@ -328,14 +324,15 @@
     <!-- The icon is its own element, not text inside #fp: the probes in
          ../test read #fp byte for byte against ssh-keygen -lf. -->
     <div class="fp"><span id="fp"></span> <span id="icon" class="icon"></span></div>
-    <!-- Spectre mode only. The identicon checks the name and the secret the
+    <!-- Spectre mode only, collapsed. The identicon checks the name and the secret the
          way the Spectre app does, so the name itself is not repeated here;
          the line names the site, counter and version that went in, since a
          wrong one gives a different key with the same identicon. -->
-    <div id="spectreBox" class="hidden">
-      <div>Spectre identity, and the identicon of the name and secret:</div>
+    <details id="spectreBox" class="hidden">
+      <summary>Spectre identity</summary>
+      <div>Site, counter, version, and the identicon of the name and secret:</div>
       <div class="fp plain"><span id="spIdentity"></span> <span id="spIcon" class="icon"></span></div>
-    </div>
+    </details>
     <div>
       <button id="exportPubBtn">Export Public Key (QR)</button>
       <button id="lockBtn" class="danger">Clear &amp; Lock</button>
@@ -6088,6 +6085,7 @@ function enterScreen2() {
     $('seedWordsBox').classList.add('hidden');
   }
   $('seedWordsBox').open = false;
+  $('spectreBox').open = false;
   $('msg').value = '';
   $('msgDigest').textContent = '';
   $('signErr').textContent = '';
@@ -6278,6 +6276,7 @@ $('lockBtn').addEventListener('click', () => {
   $('spectreBox').classList.add('hidden');
   $('seedWordsBox').classList.add('hidden');
   $('seedWordsBox').open = false;
+  $('spectreBox').open = false;
   // Remove the public-key fingerprint, its icon and any QR data URLs from the DOM.
   $('fp').textContent = '';
   $('icon').textContent = '';

@@ -106,7 +106,7 @@ The field was `type="text"` before,
 on the grounds that shoulder-surfing is out of scope and a visible field lets the user catch a typo that would otherwise silently derive a different key.
 Both grounds still hold, and the checkbox keeps the second:
 tick it to read back what was typed.
-Typing while it is ticked is typing into a text field again, learning included, and the label says so.
+Typing while it is ticked is typing into a text field again, learning included, and the note under Derive says so.
 A password field also invites the browser's password manager, which syncs:
 the field carries `autocomplete="new-password"`, since `off` is widely ignored on password fields.
 That token means "a new password, as when creating an account", so saved passwords are not offered;
@@ -193,7 +193,7 @@ scrypt at these parameters takes 32 MB and about a second on a desktop; on a pho
 It yields to the event loop every 2048 mixing steps, and the Derive button counts up "Deriving… N%" meanwhile.
 The words are checked by `validateMnemonic24` after they are made, so the checksum code of the two paths checks itself.
 
-Screen 2 then shows a second box under the fingerprint: the site, counter and version that went in, and the identicon the Spectre app shows beside the name.
+Screen 2 then shows a "Spectre identity" block under the fingerprint, collapsed when Screen 2 opens: the site, counter and version that went in, and the identicon the Spectre app shows beside the name.
 The name itself is not shown: the identicon stands for it.
 The identicon is keyed by the user key, so it checks the name and the secret; the line beside it is there because a wrong site or counter gives a different key under the same identicon.
 The two seed-word buttons sit in a "Seed words" block below Export and Clear & Lock, collapsed when Screen 2 opens.
@@ -212,7 +212,7 @@ The Nushell signer has no Spectre mode: it takes the 24 words, which the Spectre
 
 ## Screen 2: signing workspace
 
-Top to bottom: the test-key banner when it fires, the fingerprint with the key icon after it, the Spectre box in Spectre mode, the Export Public Key and Clear & Lock buttons, the collapsed "Seed words" block in Spectre mode, a horizontal rule, then the message area, the "Sign as a file" checkbox, the digest line, the namespace field and Sign.
+Top to bottom: the test-key banner when it fires, the fingerprint with the key icon after it, the collapsed "Spectre identity" block in Spectre mode, the Export Public Key and Clear & Lock buttons, the collapsed "Seed words" block in Spectre mode, a horizontal rule, then the message area, the "Sign as a file" checkbox, the digest line, the namespace field and Sign.
 The rule is the division: identity above it, signing below.
 The key icon of `main.md` sits in the fingerprint box, after the fingerprint, in its own element:
 the probes in `../test/` read the fingerprint element byte for byte against `ssh-keygen -lf`,
