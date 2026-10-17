@@ -79,3 +79,29 @@ so a commit object (`git cat-file -p HEAD`, signed raw) takes `--namespace git` 
 or `git` in the namespace field on the page.
 
 `help nu-okp-signer derive` prints the documented test vectors with the fingerprint and the four-glyph key icon each must give, so the module can be checked by hand where no test toolchain exists.
+
+## Signing a commit: `sign-commit.nu`
+
+A Nushell module for the machine that holds the repository.
+It needs `git` and `ssh-keygen`,
+so it is not for the air-gapped machine.
+It signs HEAD with a key that only the signing device has:
+
+```
+use sign-commit.nu
+sign-commit | qrencode --type ANSIUTF8   # the bytes of HEAD, for the signer
+open --raw sign.txt | sign-commit apply  # the block from the signer goes into HEAD
+git verify-commit HEAD
+```
+
+`user.signingKey` names the public half of the signer's key,
+and `apply` refuses a block that does not verify under it.
+The new commit keeps the author, the committer and their dates:
+`apply` adds only the signature header,
+then moves the branch to the new commit.
+
+On iPhone, the Camera does not show the text of this QR:
+it finds the 10-digit commit timestamp and offers it as a phone number.
+A Shortcut with two actions reads the full text: "Scan QR or Barcode", then "Copy to Clipboard".
+Paste the text on the page, untick "Sign as a file", and set the namespace to `git`.
+Before signing, compare the digest on the page with `sign-commit | hash sha256`.
