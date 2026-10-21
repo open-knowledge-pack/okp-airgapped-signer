@@ -96,6 +96,8 @@ git verify-commit HEAD
 
 `user.signingKey` names the public half of the signer's key,
 and `apply` refuses a block that does not verify under it.
+`apply --pubkey <key>.pub` names another public key for this one signature,
+and `user.signingKey` stays as it is.
 The new commit keeps the author, the committer and their dates:
 `apply` adds only the signature header,
 then moves the branch to the new commit.

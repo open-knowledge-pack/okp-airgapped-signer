@@ -27,6 +27,24 @@ def refuse-signed [bytes: string] {
     }
 }
 
+# The public key line that user.signingKey names, inline or by path.
+def configured-key [repo: path]: nothing -> string {
+    let hint = "set user.signingKey to the public key of the signer: git config user.signingKey <key>.pub, or pass --pubkey <key>.pub"
+    let out = ^git -C $repo config user.signingKey | complete
+    if $out.exit_code != 0 {
+        error make {msg: $hint}
+    }
+    let key = $out.stdout | str trim
+    if ($key starts-with "key::") {
+        return ($key | str substring 5..)
+    }
+    let key_path = $repo | path join $key | path expand
+    if not ($key_path | path exists) {
+        error make {msg: $hint}
+    }
+    open --raw $key_path | str trim
+}
+
 # The bytes of HEAD to sign: raw mode, namespace `git`, final LF included.
 #
 # js-okp-signer: untick "Sign as a file", namespace git; compare the digest
@@ -45,6 +63,7 @@ export def main [
 # Returns the id of the signed commit.
 export def apply [
     --repo: path = "." # the repository whose HEAD is signed
+    --pubkey: path # the public half of the signer's key (default: user.signingKey)
 ]: string -> string {
     let block = $in | str trim
     let old = ^git -C $repo rev-parse HEAD | str trim
@@ -53,17 +72,14 @@ export def apply [
 
     # Why check with ssh-keygen before writing: a block over other bytes, or by
     # another key, would give a commit that only fails later, in
-    # `git verify-commit`. The key is user.signingKey, the public half only,
-    # as in `seal --external-signer`.
-    let key = ^git -C $repo config user.signingKey | str trim
-    let pubkey = if ($key starts-with "key::") {
-        $key | str substring 5..
+    # `git verify-commit`. The key is the public half only, as in
+    # `seal --external-signer`.
+    # Why --pubkey: to sign with the key nu-multiproof registered without
+    # changing user.signingKey for the repo.
+    let pubkey = if $pubkey != null {
+        open --raw $pubkey | str trim
     } else {
-        let key_path = $repo | path join $key | path expand
-        if not ($key_path | path exists) {
-            error make {msg: "set user.signingKey to the public key of the signer: git config user.signingKey <key>.pub"}
-        }
-        open --raw $key_path | str trim
+        configured-key $repo
     }
     let tmp = mktemp --directory
     $"signer ($pubkey)\n" | save $"($tmp)/allowed"
@@ -71,7 +87,7 @@ export def apply [
     let check = $bytes | ^ssh-keygen -Y verify -f $"($tmp)/allowed" -I signer -n git -s $"($tmp)/sig" | complete
     rm --recursive $tmp
     if $check.exit_code != 0 {
-        error make {msg: $"not a signature by user.signingKey over HEAD under namespace git: ($check.stdout + $check.stderr | str trim)"}
+        error make {msg: $"not a signature by the signer's key over HEAD under namespace git: ($check.stdout + $check.stderr | str trim)"}
     }
 
     # git's own layout: the header goes last among the headers, every line of
