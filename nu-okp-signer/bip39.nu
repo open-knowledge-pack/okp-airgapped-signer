@@ -12,11 +12,11 @@ export def entropy [words: list<string>]: nothing -> list<int> {
   if ($words | length) != 24 {
     error make {msg: $"expected 24 words, got (($words | length))"}
   }
-  # Unknown words become -1: `each` drops a null result, which would shift
-  # every later word. Not `error make` inside the closure because Nushell
+  # Unknown words stay null with `--keep-empty`: plain `each` drops a null result,
+  # which would shift every later word. Not `error make` inside the closure because Nushell
   # wraps an error raised there as "Eval block failed", and the caller sees that.
-  let indexes = $words | each {|w| $WORDS | enumerate | where item == $w | get --optional 0.index | default (-1) }
-  let unknown = $indexes | enumerate | where item == -1 | get --optional 0.index
+  let indexes = $words | each --keep-empty {|w| $WORDS | enumerate | where item == $w | get --optional 0.index }
+  let unknown = $indexes | enumerate | where item == null | get --optional 0.index
 
   if $unknown != null {
     error make {msg: $"word #($unknown + 1) \"($words | get $unknown)\" is not in the BIP39 wordlist"}

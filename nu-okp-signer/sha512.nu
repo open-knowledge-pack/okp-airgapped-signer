@@ -123,13 +123,13 @@ export def sha512-compress [state: list<int> block: list<int>]: nothing -> list<
 }
 
 # Big-endian, 8 bytes per word.
-def bytes-to-words [bytes: list<int>]: nothing -> list<int> {
+export def bytes-to-words [bytes: list<int>]: nothing -> list<int> {
   $bytes | chunks 8 | each {|c|
     ($c.0 bit-shl 56) bit-or ($c.1 bit-shl 48) bit-or ($c.2 bit-shl 40) bit-or ($c.3 bit-shl 32) bit-or ($c.4 bit-shl 24) bit-or ($c.5 bit-shl 16) bit-or ($c.6 bit-shl 8) bit-or $c.7
   }
 }
 
-def words-to-bytes [words: list<int>]: nothing -> list<int> {
+export def words-to-bytes [words: list<int>]: nothing -> list<int> {
   $words
   | each {|w| [(($w bit-shr 56) bit-and 0xff) (($w bit-shr 48) bit-and 0xff) (($w bit-shr 40) bit-and 0xff) (($w bit-shr 32) bit-and 0xff) (($w bit-shr 24) bit-and 0xff) (($w bit-shr 16) bit-and 0xff) (($w bit-shr 8) bit-and 0xff) ($w bit-and 0xff)] }
   | flatten

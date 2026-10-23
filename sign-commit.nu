@@ -12,8 +12,9 @@
 # The commit object exactly as git hashes it, final LF included.
 # Why `complete`: a plain capture of external output drops the trailing LF,
 # and that LF is part of the signed bytes.
-def commit-bytes [repo: path, rev: string]: nothing -> string {
+def commit-bytes [repo: path rev: string]: nothing -> string {
     let out = ^git -C $repo cat-file commit $rev | complete
+
     if $out.exit_code != 0 {
         error make {msg: $"git cat-file commit ($rev) failed: ($out.stderr | str trim)"}
     }
@@ -21,9 +22,9 @@ def commit-bytes [repo: path, rev: string]: nothing -> string {
 }
 
 # Catches both `gpgsig` and `gpgsig-sha256`.
-def refuse-signed [bytes: string] {
+def refuse-signed [bytes: string]: nothing -> nothing {
     if ($bytes | lines | take until { $in == "" } | any { $in starts-with "gpgsig" }) {
-        error make {msg: "HEAD is already signed; git signs the object without its signature header, so sign a commit with none"}
+        error make {msg: "HEAD is already signed; git signs the object without its signature header" help: "sign a commit with no signature"}
     }
 }
 
@@ -31,14 +32,17 @@ def refuse-signed [bytes: string] {
 def configured-key [repo: path]: nothing -> string {
     let hint = "set user.signingKey to the public key of the signer: git config user.signingKey <key>.pub, or pass --pubkey <key>.pub"
     let out = ^git -C $repo config user.signingKey | complete
+
     if $out.exit_code != 0 {
         error make {msg: $hint}
     }
     let key = $out.stdout | str trim
+
     if ($key starts-with "key::") {
         return ($key | str substring 5..)
     }
     let key_path = $repo | path join $key | path expand
+
     if not ($key_path | path exists) {
         error make {msg: $hint}
     }
@@ -54,6 +58,7 @@ export def main [
     --repo: path = "." # the repository whose HEAD is signed
 ]: nothing -> string {
     let bytes = commit-bytes $repo HEAD
+
     refuse-signed $bytes
     $bytes
 }
@@ -68,6 +73,7 @@ export def apply [
     let block = $in | str trim
     let old = ^git -C $repo rev-parse HEAD | str trim
     let bytes = commit-bytes $repo $old
+
     refuse-signed $bytes
 
     # Why check with ssh-keygen before writing: a block over other bytes, or by
@@ -82,9 +88,11 @@ export def apply [
         configured-key $repo
     }
     let tmp = mktemp --directory
+
     $"signer ($pubkey)\n" | save $"($tmp)/allowed"
     $block + "\n" | save $"($tmp)/sig"
     let check = $bytes | ^ssh-keygen -Y verify -f $"($tmp)/allowed" -I signer -n git -s $"($tmp)/sig" | complete
+
     rm --recursive $tmp
     if $check.exit_code != 0 {
         error make {msg: $"not a signature by the signer's key over HEAD under namespace git: ($check.stdout + $check.stderr | str trim)"}
@@ -102,6 +110,7 @@ export def apply [
     let signed = $bytes | str replace "\n\n" $"\n($header)\n\n"
 
     let new = $signed | ^git -C $repo hash-object -t commit -w --stdin | str trim
+
     # Why the old value: if HEAD moved since the read above, refuse rather
     # than drop the commit that moved it.
     ^git -C $repo update-ref -m "sign-commit: external signer" HEAD $new $old

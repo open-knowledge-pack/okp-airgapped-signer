@@ -118,12 +118,8 @@ def "sign --namespace git --raw produces a commit signature git verify-commit ac
   let payload = ^git -C $dir cat-file -p HEAD | decode
   let block = $payload | nu-okp-signer sign $key --namespace git --raw
   # The gpgsig header: first line after the keyword, every next line indented by one space.
-  let gpgsig = $block
-    | lines
-    | enumerate
-    | each {|l| if $l.index == 0 { $"gpgsig ($l.item)" } else { $" ($l.item)" } }
-    | str join "\n"
-  let signed = $payload | str replace --regex '\n\n' $"\n($gpgsig)\n\n"
+  let gpgsig = $"gpgsig ($block | lines | str join "\n ")"
+  let signed = $payload | str replace "\n\n" $"\n($gpgsig)\n\n"
   let new = $signed | ^git -C $dir hash-object -t commit -w --stdin | str trim
 
   ^git -C $dir update-ref refs/heads/main $new

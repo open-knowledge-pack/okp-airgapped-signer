@@ -53,20 +53,19 @@ const TEST_KEYS = {
 @example "test vector 1 under passphrase PROPHET, which proves the passphrase reaches the salt; about 16 s" {
   {mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art", passphrase: "PROPHET"} | nu-okp-signer derive | select fingerprint icon
 } --result {fingerprint: "SHA256:2emarN+1I3mvvM6C5bJ6CwZqnl+/j+rloiE5cmRhpfA", icon: "╚☻╯♙"}
-export def derive []: [nothing -> record, string -> record, record -> record] {
+@category crypto
+export def derive []: [nothing -> record string -> record record -> record] {
   let given = $in
-  let mnemonic = match ($given | describe --detailed | get type) {
-    "nothing" => (input "24 words, space separated: ")
-    "string" => $given
-    _ => $given.mnemonic
+  let given = match ($given | describe --detailed | get type) {
+    "nothing" => {
+      mnemonic: (input "24 words, space separated: ")
+      passphrase: (input "BIP39 passphrase (blank is the default; a non-blank one becomes part of the key): ")
+    }
+    "string" => {mnemonic: $given passphrase: ""}
+    _ => $given
   }
-  let passphrase = match ($given | describe --detailed | get type) {
-    "nothing" => (input "BIP39 passphrase (blank is the default; a non-blank one becomes part of the key): ")
-    "string" => ""
-    _ => $given.passphrase
-  }
-  let words = $mnemonic | str trim | str lowercase | split row --regex '\s+'
-  let seed = bip39 seed $words $passphrase
+  let words = $given.mnemonic | str trim | str lowercase | split row --regex '\s+'
+  let seed = bip39 seed $words $given.passphrase
   # Not SLIP-0010/BIP32 because: this is not a crypto wallet. The mnemonic is
   # only a human-friendly encoding of 256 bits of entropy. Sharing a seed with
   # a wallet would be an anti-pattern, so compatibility with Ledger, Solana or
@@ -124,6 +123,7 @@ OQAAAECw01BnJ4fIvPNyAAVhTV89J3G2+S3TbvBKYek4yHSnyOiZqWeznuauiYhlxeavtM
 /2L55wrhOdLDaMus1J/MoK
 -----END SSH SIGNATURE-----
 "
+@category crypto
 export def sign [
   key: record                      # the record `derive` returned
   --raw                            # sign the text exactly as given, no LF appended
@@ -147,8 +147,10 @@ export def sign [
 # by another key or under another namespace.
 @example "test vector 1 verifies the block it just signed; about 19 s, almost all of it the derivation" {
   let key = {mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art", passphrase: ""} | nu-okp-signer derive
+
   "hello" | nu-okp-signer verify $key ("hello" | nu-okp-signer sign $key)
 } --result true
+@category crypto
 export def verify [
   key: record                      # the record `derive` returned
   block: string                    # the armored SSHSIG block to check
@@ -174,7 +176,7 @@ def message-bytes [raw: bool verb: string]: string -> list<int> {
     $text
   } else {
     if ($text | str ends-with "\n") {
-      error make {msg: $"text already ends with a newline; remove it, or pass --raw to ($verb) the text exactly as given"}
+      error make {msg: "text already ends with a newline" help: $"remove it, or pass --raw to ($verb) the text exactly as given"}
     }
     $text + "\n"
   }

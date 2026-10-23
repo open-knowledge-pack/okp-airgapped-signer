@@ -20,20 +20,20 @@ const MAGIC = "SSHSIG"
 # agree.
 # Not trimmed because: a trim would silently change the signed bytes, and a
 # flag value is what the caller typed on purpose. Refuse, do not repair.
-def namespace-bytes [namespace: string]: nothing -> list<int> {
+export def namespace-bytes [namespace: string]: nothing -> list<int> {
   if ($namespace | str trim | is-empty) {
-    error make {msg: 'the namespace is empty; "file" for a file, "git" for a commit object'}
+    error make {msg: 'the namespace is empty' help: 'pass "file" for a file, "git" for a commit object'}
   }
   string-to-bytes $namespace
 }
 
 # SSH wire string (RFC 4251 section 5): uint32 big-endian length, then bytes.
-def ssh-string [bytes: list<int>]: nothing -> list<int> {
+export def ssh-string [bytes: list<int>]: nothing -> list<int> {
   uint32-to-bytes ($bytes | length) | append $bytes
 }
 
 # Read one wire string at an offset, and say where the next field starts.
-def ssh-string-read [bytes: list<int> at: int]: nothing -> record<value: list<int>, next: int> {
+export def ssh-string-read [bytes: list<int> at: int]: nothing -> record<value: list<int>, next: int> {
   if ($bytes | length) < ($at + 4) {
     error make {msg: $"truncated SSHSIG block: no length prefix at byte ($at)"}
   }
@@ -49,7 +49,7 @@ def ssh-string-read [bytes: list<int> at: int]: nothing -> record<value: list<in
 # What Ed25519 actually signs. Note what is absent: the version field and the
 # public key, both of which the outer blob carries. Built in one place so
 # `sign` and `verify` cannot drift apart on the layout.
-def signed-blob [namespace: list<int> hash_alg: list<int> digest: list<int>]: nothing -> list<int> {
+export def signed-blob [namespace: list<int> hash_alg: list<int> digest: list<int>]: nothing -> list<int> {
   string-to-bytes $MAGIC
   | append (ssh-string $namespace)
   | append (ssh-string [])
@@ -59,17 +59,17 @@ def signed-blob [namespace: list<int> hash_alg: list<int> digest: list<int>]: no
 
 # The ssh-ed25519 wire blob: string "ssh-ed25519" then string public(32).
 export def public-blob [public: list<int>]: nothing -> list<int> {
-  ssh-string (string-to-bytes "ssh-ed25519") | append (ssh-string $public)
+  ssh-string (string-to-bytes $KEY_ALG) | append (ssh-string $public)
 }
 
 # The line authorized_keys and allowed_signers take.
 export def public-line [public: list<int>]: nothing -> string {
-  $"ssh-ed25519 (bytes-to-base64 (public-blob $public))"
+  $"($KEY_ALG) (bytes-to-base64 (public-blob $public))"
 }
 
 # SHA-256 over the wire blob: the bytes the fingerprint encodes and the icon
 # indexes, so both are pictures of one digest.
-def public-digest [public: list<int>]: nothing -> binary {
+export def public-digest [public: list<int>]: nothing -> binary {
   bytes-to-binary (public-blob $public) | hash sha256 --binary
 }
 
@@ -132,7 +132,7 @@ export def sign [msg: list<int> secret: list<int> namespace: string]: nothing ->
 }
 
 # Strip the two armor lines and decode the base64 body back to bytes.
-def unarmor [armored: string]: nothing -> list<int> {
+export def unarmor [armored: string]: nothing -> list<int> {
   let lines = $armored | lines | str trim | where $it != ""
 
   if ($lines | is-empty) or ($lines | first) != "-----BEGIN SSH SIGNATURE-----" {

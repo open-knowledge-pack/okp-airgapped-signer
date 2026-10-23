@@ -37,17 +37,17 @@ const L = [0xed 0xd3 0xf5 0x5c 0x1a 0x63 0x12 0x58 0xd6 0x9c 0xf7 0xa2 0xde 0xf9
 # loop over limb indexes costs ten times the arithmetic it drives. Measured:
 # gf-mul 3.1 ms to 0.25 ms, one signature 14 s to 1 s.
 
-def gf-add [a: list<int> b: list<int>]: nothing -> list<int> {
+export def gf-add [a: list<int> b: list<int>]: nothing -> list<int> {
   [($a.0 + $b.0) ($a.1 + $b.1) ($a.2 + $b.2) ($a.3 + $b.3) ($a.4 + $b.4) ($a.5 + $b.5) ($a.6 + $b.6) ($a.7 + $b.7) ($a.8 + $b.8) ($a.9 + $b.9) ($a.10 + $b.10) ($a.11 + $b.11) ($a.12 + $b.12) ($a.13 + $b.13) ($a.14 + $b.14) ($a.15 + $b.15)]
 }
 
-def gf-sub [a: list<int> b: list<int>]: nothing -> list<int> {
+export def gf-sub [a: list<int> b: list<int>]: nothing -> list<int> {
   [($a.0 - $b.0) ($a.1 - $b.1) ($a.2 - $b.2) ($a.3 - $b.3) ($a.4 - $b.4) ($a.5 - $b.5) ($a.6 - $b.6) ($a.7 - $b.7) ($a.8 - $b.8) ($a.9 - $b.9) ($a.10 - $b.10) ($a.11 - $b.11) ($a.12 - $b.12) ($a.13 - $b.13) ($a.14 - $b.14) ($a.15 - $b.15)]
 }
 
 # Propagate carries once. The carry out of the top limb is 2^256, which is
 # 38 mod p, so it folds back into limb 0.
-def gf-carry [a: list<int>]: nothing -> list<int> {
+export def gf-carry [a: list<int>]: nothing -> list<int> {
   let c0 = $a.0 // 65536
   let c1 = ($a.1 + $c0) // 65536
   let c2 = ($a.2 + $c1) // 65536
@@ -71,7 +71,7 @@ def gf-carry [a: list<int>]: nothing -> list<int> {
 # Schoolbook product, tweetnacl's M: line k holds every a[i] * b[j] with
 # i + j == k, so t0..t30 is the 31-limb product. Limb 16 and up sit at 2^256
 # and above and fold down with the 38x wrap.
-def gf-mul [a: list<int> b: list<int>]: nothing -> list<int> {
+export def gf-mul [a: list<int> b: list<int>]: nothing -> list<int> {
   let t0 = $a.0 * $b.0
   let t1 = $a.0 * $b.1 + $a.1 * $b.0
   let t2 = $a.0 * $b.2 + $a.1 * $b.1 + $a.2 * $b.0
@@ -112,7 +112,7 @@ def gf-mul [a: list<int> b: list<int>]: nothing -> list<int> {
 # common part is here: a^(2^250 - 1), plus the a^11 both of them finish with.
 # 250 squarings and 10 multiplications, against one multiplication per exponent
 # bit for a square-and-multiply loop.
-def gf-chain [a: list<int>]: nothing -> record<z250: list<int>, z11: list<int>> {
+export def gf-chain [a: list<int>]: nothing -> record<z250: list<int>, z11: list<int>> {
   let z2 = gf-mul $a $a
   let z8 = gf-sqr-n $z2 2
   let z9 = gf-mul $a $z8
@@ -130,7 +130,7 @@ def gf-chain [a: list<int>]: nothing -> record<z250: list<int>, z11: list<int>> 
 }
 
 # Inverse by Fermat: a^(p - 2), and p - 2 is 2^255 - 21.
-def gf-inv [a: list<int>]: nothing -> list<int> {
+export def gf-inv [a: list<int>]: nothing -> list<int> {
   let c = gf-chain $a
 
   gf-mul (gf-sqr-n $c.z250 5) $c.z11
@@ -138,12 +138,12 @@ def gf-inv [a: list<int>]: nothing -> list<int> {
 
 # a^((p - 5) / 8), which is a^(2^252 - 3). Decompression uses it to turn the
 # ratio that defines x into a candidate square root.
-def gf-pow2523 [a: list<int>]: nothing -> list<int> {
+export def gf-pow2523 [a: list<int>]: nothing -> list<int> {
   gf-mul (gf-sqr-n (gf-chain $a).z250 2) $a
 }
 
 # a^(2^n) by repeated squaring.
-def gf-sqr-n [a: list<int> n: int]: nothing -> list<int> {
+export def gf-sqr-n [a: list<int> n: int]: nothing -> list<int> {
   mut c = $a
 
   # Why 0..<$n and not 1..$n: Nushell reads 1..0 as a descending range and
@@ -153,7 +153,7 @@ def gf-sqr-n [a: list<int> n: int]: nothing -> list<int> {
 }
 
 # Fully reduce to [0, p) and encode as 32 little-endian bytes.
-def gf-pack [n: list<int>]: nothing -> list<int> {
+export def gf-pack [n: list<int>]: nothing -> list<int> {
   mut t = gf-carry (gf-carry (gf-carry $n))
 
   # Twice: subtract p with borrow, keep the result when it did not go negative.
@@ -179,24 +179,24 @@ def gf-pack [n: list<int>]: nothing -> list<int> {
 # The inverse of gf-pack for the coordinate itself: 32 little-endian bytes back
 # to limbs. The top bit of the last byte carries the sign of x, not part of y,
 # so it is dropped here and read separately.
-def gf-unpack [bytes: list<int>]: nothing -> list<int> {
+export def gf-unpack [bytes: list<int>]: nothing -> list<int> {
   let limbs = $bytes | chunks 2 | each {|c| $c.0 + ($c.1 bit-shl 8) }
 
   $limbs | update 15 (($limbs | get 15) bit-and 0x7fff)
 }
 
 # Both compare fully reduced forms, since one value has many limb encodings.
-def gf-eq [a: list<int> b: list<int>]: nothing -> bool {
+export def gf-eq [a: list<int> b: list<int>]: nothing -> bool {
   (gf-pack $a) == (gf-pack $b)
 }
 
-def gf-parity [a: list<int>]: nothing -> int {
+export def gf-parity [a: list<int>]: nothing -> int {
   (gf-pack $a | first) bit-and 1
 }
 
 # --- group arithmetic, extended coordinates [x y z t] ----------------------
 
-def point-add [p: list<list<int>> q: list<list<int>>]: nothing -> list<list<int>> {
+export def point-add [p: list<list<int>> q: list<list<int>>]: nothing -> list<list<int>> {
   let a = gf-mul (gf-sub $p.1 $p.0) (gf-sub $q.1 $q.0)
   let b = gf-mul (gf-add $p.0 $p.1) (gf-add $q.0 $q.1)
   let c = gf-mul (gf-mul $p.3 $q.3) $D2
@@ -211,7 +211,7 @@ def point-add [p: list<list<int>> q: list<list<int>>]: nothing -> list<list<int>
 }
 
 # scalar (32 little-endian bytes) times point, double-and-add from the top bit.
-def point-scalarmult [q: list<list<int>> s: list<int>]: nothing -> list<list<int>> {
+export def point-scalarmult [q: list<list<int>> s: list<int>]: nothing -> list<list<int>> {
   mut p = [$GF0 $GF1 $GF1 $GF0]
 
   for i in 255..0 {
@@ -223,12 +223,12 @@ def point-scalarmult [q: list<list<int>> s: list<int>]: nothing -> list<list<int
   $p
 }
 
-def point-scalarbase [s: list<int>]: nothing -> list<list<int>> {
+export def point-scalarbase [s: list<int>]: nothing -> list<list<int>> {
   point-scalarmult [$BX $BY $GF1 (gf-mul $BX $BY)] $s
 }
 
 # Compressed encoding: y as 32 bytes, with the low bit of x in the top bit.
-def point-pack [p: list<list<int>>]: nothing -> list<int> {
+export def point-pack [p: list<list<int>>]: nothing -> list<int> {
   let zi = gf-inv $p.2
   let x = gf-pack (gf-mul $p.0 $zi)
   let y = gf-pack (gf-mul $p.1 $zi)
@@ -247,7 +247,7 @@ def point-pack [p: list<list<int>>]: nothing -> list<int> {
 # num * den^3 * (num * den^7)^((p-5)/8), which is a root of the ratio whenever
 # one exists; over this field it can land on the wrong one, and multiplying by
 # sqrt(-1) moves it to the other. If neither squares back to num, no x exists.
-def point-unpack-neg [packed: list<int>]: nothing -> any {
+export def point-unpack-neg [packed: list<int>]: nothing -> oneof<list<list<int>>, nothing> {
   let y = gf-unpack $packed
   let y2 = gf-mul $y $y
   let num = gf-sub $y2 $GF1
@@ -276,7 +276,7 @@ def point-unpack-neg [packed: list<int>]: nothing -> any {
 # Reduce a 64-entry little-endian number (entries may exceed 255 and go
 # negative) to 32 bytes mod L. Straight port of tweetnacl modL; `//` floors,
 # matching the arithmetic shifts there.
-def scalar-modl [x0: list<int>]: nothing -> list<int> {
+export def scalar-modl [x0: list<int>]: nothing -> list<int> {
   mut x = $x0
 
   for i in 63..32 {
@@ -317,7 +317,7 @@ def scalar-modl [x0: list<int>]: nothing -> list<int> {
 # Is a 32-byte little-endian scalar strictly below the group order? The most
 # significant byte is the last one, so compare from the end and let the first
 # byte that differs decide.
-def scalar-below-l [s: list<int>]: nothing -> bool {
+export def scalar-below-l [s: list<int>]: nothing -> bool {
   let diff = $s | reverse | zip ($L | reverse) | where $it.0 != $it.1
 
   if ($diff | is-empty) { false } else { ($diff | first).0 < ($diff | first).1 }
@@ -325,7 +325,7 @@ def scalar-below-l [s: list<int>]: nothing -> bool {
 
 # --- public API ---------------------------------------------------------------
 
-def clamp [d: list<int>]: nothing -> list<int> {
+export def clamp [d: list<int>]: nothing -> list<int> {
   $d | update 0 (($d | get 0) bit-and 248) | update 31 (((($d | get 31) bit-and 127) bit-or 64))
 }
 
