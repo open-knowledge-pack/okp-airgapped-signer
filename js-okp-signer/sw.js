@@ -5,7 +5,7 @@
 // new VERSION here is what makes an installed app pick up a new index.html.
 // Why not a version inside index.html: a cache-first worker would serve the
 // old index.html forever, so the browser would never see the new value.
-const VERSION = '2026-10-25.5454935d082c';
+const VERSION = '2026-10-25.3972c8cc8edf';
 
 // Why the scope in the name: every app on a github.io host shares one
 // origin, and so one set of caches. The cleanup below used to delete every
