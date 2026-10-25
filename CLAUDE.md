@@ -3,9 +3,14 @@
 ## `VERSION` in `js-okp-signer/sw.js` follows the files it caches
 
 `VERSION` carries the hash of the files in `FILES`.
-After a change to one of them,
-run `nu toolkit.nu sw-version` before the commit.
-`nu toolkit.nu check` fails while the hash does not match.
+Do not change `VERSION` while the work on a branch goes on.
+Before the branch lands on `master`,
+run `nu toolkit.nu sw-version` once,
+and commit `sw.js` as the last commit of the branch.
+Why: a branch holds several changes to the page,
+and a `VERSION` in each commit only conflicts at each rebase.
+`nu toolkit.nu check` fails while the hash does not match;
+the export runs it and refuses a tip without the new `VERSION`.
 
 Without a new `VERSION`, an installed app keeps the old page:
 the worker answers from its cache,
