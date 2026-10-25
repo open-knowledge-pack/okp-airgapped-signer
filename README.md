@@ -109,3 +109,8 @@ it finds the 10-digit commit timestamp and offers it as a phone number.
 A Shortcut with two actions reads the full text: "Scan QR or Barcode", then "Copy to Clipboard".
 Paste the text on the page, untick "Sign as a file", and set the namespace to `git`.
 Before signing, compare the digest on the page with `sign-commit | hash sha256`.
+
+## License
+
+GPLv3, because the page contains code copied from Spectre, which is under GPLv3.
+The full text is in `LICENSE`.
