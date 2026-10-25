@@ -438,6 +438,11 @@
   <!-- Why a visible status: a service worker that failed to register would
        otherwise fail silently, and the user would learn it offline. -->
   <div id="offline" class="muted hidden"></div>
+  <!-- Why plain text, not a link: the page has no links, so no tap can
+       navigate away from an air-gapped page that holds a key. -->
+  <div class="muted">
+    The Spectre mode uses code of Spectre (spectre.app, GPLv3).
+  </div>
 </main>
 
 <!--

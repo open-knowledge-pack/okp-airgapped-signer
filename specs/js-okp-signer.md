@@ -49,6 +49,7 @@ The reverse is not in this page's hands: another app on the same origin whose wo
 No fallback because the page is self-contained and its CSP loads nothing else, so an uncached request is a bug, not a need.
 Registration is gated on `location.protocol === 'https:'`: under `file://` `navigator.serviceWorker` still exists but `register()` rejects, so the gate is the protocol, not the property, and the `file://` copy behaves exactly as it did before any of this existed.
 A line in the page shows `offline copy: ready, version ...`, or the failure, because a worker that failed to register would otherwise be discovered offline.
+Below it, a line on both screens says that the Spectre mode uses code of Spectre (GPLv3).
 
 The cache version lives in `sw.js`, not in the page.
 It is `<date>.<hash>`: the hash is the first 12 hex digits of SHA-256 over the files in `FILES`, concatenated in their order, and the date is when that hash last changed.
