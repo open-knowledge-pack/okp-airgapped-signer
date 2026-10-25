@@ -50,7 +50,10 @@ No fallback because the page is self-contained and its CSP loads nothing else, s
 Registration is gated on `location.protocol === 'https:'`: under `file://` `navigator.serviceWorker` still exists but `register()` rejects, so the gate is the protocol, not the property, and the `file://` copy behaves exactly as it did before any of this existed.
 A line in the page shows `offline copy: ready, version ...`, or the failure, because a worker that failed to register would otherwise be discovered offline.
 
-The cache version lives in `sw.js`, not in the page, and must be bumped whenever any file in the folder changes.
+The cache version lives in `sw.js`, not in the page.
+It is `<date>.<hash>`: the hash is the first 12 hex digits of SHA-256 over the files in `FILES`, concatenated in their order, and the date is when that hash last changed.
+So any change to a cached file gives a new version.
+`nu toolkit.nu sw-version` writes it, and `nu toolkit.nu check` checks the hash, of the files on disk or, with `--rev`, of a commit.
 `sw.js` is the only file the browser refetches past the cache, so a version inside a cache-first page would never be seen.
 
 There is deliberately no integrity check inside the page: the code that would print a hash is the code being checked, and any script in the same page can patch what it shows.

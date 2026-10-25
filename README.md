@@ -33,8 +33,10 @@ On iPhone open that URL in Safari, share, "Add to Home Screen".
 The Home Screen app has its own storage, separate from Safari, so launch it once while online: the service worker in `js-okp-signer/sw.js` caches the page on that first launch, and the app works with no network after that.
 The footer shows `offline copy: ready, version ...` when the cache is in place.
 
-When any file in `js-okp-signer/` changes, bump `VERSION` in `js-okp-signer/sw.js`.
-That is the only file the browser refetches past the cache, so without the bump an installed app keeps the old page.
+`VERSION` in `js-okp-signer/sw.js` is the date and the hash of the files the worker caches, for example `2026-10-25.5454935d082c`.
+That is the only file the browser refetches past the cache, so a `VERSION` that stays the same keeps the old page in an installed app.
+After a change to a cached file, `nu toolkit.nu sw-version` writes it, and `nu toolkit.nu check` fails while it does not match the files.
+The hash part is `cat index.html manifest.webmanifest icon-180.png | sha256sum`, cut to 12 digits, in `js-okp-signer/`.
 
 To check that the hosted page is the one in git, without any software on the phone, a three-action Shortcut: "Get Contents of URL" with the app URL, "Generate Hash" SHA-256, "Show Result".
 Compare with the hash from git on the desktop:
