@@ -8,15 +8,6 @@ def "hex-to-bytes reads the pair 0b as a byte and not as a binary prefix" [] {
   assert equal (hex-to-bytes "0b00ff") [11 0 255]
 }
 
-# sha512.nu keeps each 64-bit word in one i64 and rests on these three facts
-# about Nushell ints. A Nushell that changes one fails here, not in a seed.
-@test
-def "int operators give the 64-bit word semantics sha512 relies on" [] {
-  assert equal 0xffffffffffffffff (-1)
-  assert equal (0x7fffffffffffffff bit-shl 1) (-2)
-  assert equal (-1 bit-shr 1) (-1)
-}
-
 @test
 def "sha512 of empty input matches FIPS vector" [] {
   assert equal (bytes-to-hex (sha512 [])) "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"
@@ -78,7 +69,6 @@ def "pbkdf2 matches node crypto at 3 iterations" [] {
 
 # Expected seeds come from the npm bip39 package:
 #   bip39.mnemonicToSeedSync(mnemonic, passphrase)
-# Each run takes about 14 s (2048 iterations).
 @test
 def "pbkdf2 derives the BIP39 test vector 1 seed with passphrase TREZOR" [] {
   let mnemonic = (0..<23 | each { "abandon" } | append "art" | str join " ")

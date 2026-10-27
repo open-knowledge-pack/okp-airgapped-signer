@@ -15,7 +15,7 @@ OQAAAECw01BnJ4fIvPNyAAVhTV89J3G2+S3TbvBKYek4yHSnyOiZqWeznuauiYhlxeavtM
 "
 
 # The key record `derive` would return for test vector 1, built from the
-# Ed25519 seed directly to skip the 14 s of PBKDF2.
+# Ed25519 seed directly to skip PBKDF2.
 def tv1-key []: nothing -> record {
   let kp = ed25519 keypair (hex-to-bytes "408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf70")
 

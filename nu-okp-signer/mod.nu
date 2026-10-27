@@ -2,7 +2,7 @@
 # `../js-okp-signer/index.html`, in pure Nushell. Two commands mirror
 # the page's two screens, and a third checks a block back:
 #
-#   let key = nu-okp-signer derive          # Screen 1: mnemonic to key, about 16 s
+#   let key = nu-okp-signer derive          # Screen 1: mnemonic to key, about 1 s
 #   "text" | nu-okp-signer sign $key        # Screen 2: SSHSIG block, about 1 s
 #   "text" | nu-okp-signer verify $key $sig # the page has no equivalent, about 2 s
 #
@@ -41,16 +41,16 @@ const TEST_KEYS = {
 # machine, where the test suite and its toolchain are not available. Paste
 # one in and compare the icon it prints with the one shown here at a
 # glance, and the fingerprint to be sure.
-@example "test vector 1, blank passphrase; about 16 s" {
+@example "test vector 1, blank passphrase; about 1 s" {
   {mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art", passphrase: ""} | nu-okp-signer derive | select fingerprint icon
 } --result {fingerprint: "SHA256:Pl5ce4l7GkllU5/k5ThzEWO4KidBNCbhKBaj6oxkZO8", icon: "╰☺╗♙"}
-@example "test vector 2, blank passphrase; about 16 s" {
+@example "test vector 2, blank passphrase; about 1 s" {
   {mnemonic: "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo vote", passphrase: ""} | nu-okp-signer derive | select fingerprint icon
 } --result {fingerprint: "SHA256:h971VXJqQUUkrqQ/nEjpFI2gFjGLOfv2hV3RtPuXWMw", icon: "═█╝⚐"}
-@example "test vector 3, blank passphrase; about 16 s" {
+@example "test vector 3, blank passphrase; about 1 s" {
   {mnemonic: "letter advice cage absurd amount doctor acoustic avoid letter advice cage absurd amount doctor acoustic avoid letter advice cage absurd amount doctor acoustic bless", passphrase: ""} | nu-okp-signer derive | select fingerprint icon
 } --result {fingerprint: "SHA256:UZyqW/UIECXHlI1TeX1+XebqEFAcVV3tMSyv+JGPevE", icon: "╚█╯⌘"}
-@example "test vector 1 under passphrase PROPHET, which proves the passphrase reaches the salt; about 16 s" {
+@example "test vector 1 under passphrase PROPHET, which proves the passphrase reaches the salt; about 1 s" {
   {mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art", passphrase: "PROPHET"} | nu-okp-signer derive | select fingerprint icon
 } --result {fingerprint: "SHA256:2emarN+1I3mvvM6C5bJ6CwZqnl+/j+rloiE5cmRhpfA", icon: "╚☻╯♙"}
 @category crypto
@@ -114,7 +114,7 @@ export def derive []: [nothing -> record string -> record record -> record] {
 # The example below runs the whole chain, mnemonic to signature, on test
 # vector 1. Nothing runs it: like the examples on `derive`, it is here so
 # the check can be made by hand on the air-gapped machine.
-@example "test vector 1 signs the text hello; about 18 s, almost all of it the derivation" {
+@example "test vector 1 signs the text hello; about 2 s" {
   "hello" | nu-okp-signer sign ({mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art", passphrase: ""} | nu-okp-signer derive)
 } --result "-----BEGIN SSH SIGNATURE-----
 U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgHeNS5EzTM2clk/IzSnMOGAqvKQ
@@ -145,7 +145,7 @@ export def sign [
 # Structure is a hard error — bad armor, bad base64, a truncated field. A
 # well-formed block that does not check returns false, including one signed
 # by another key or under another namespace.
-@example "test vector 1 verifies the block it just signed; about 19 s, almost all of it the derivation" {
+@example "test vector 1 verifies the block it just signed; about 4 s" {
   let key = {mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art", passphrase: ""} | nu-okp-signer derive
 
   "hello" | nu-okp-signer verify $key ("hello" | nu-okp-signer sign $key)

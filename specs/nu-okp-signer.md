@@ -9,7 +9,7 @@ The browser page is `js-okp-signer.md`.
 From the repository root, `use nu-okp-signer` gives three commands: two mirror the page's two screens, and the third has no counterpart there.
 
 ```
-let key = nu-okp-signer derive          # mnemonic to key, about 16 s
+let key = nu-okp-signer derive          # mnemonic to key, about 1 s
 let sig = "text" | nu-okp-signer sign $key  # SSHSIG block, about 1 s
 "text" | nu-okp-signer verify $key $sig     # true or false, about 2 s
 ```
@@ -33,8 +33,13 @@ It refuses an empty text and, in file mode, a text that already ends with a newl
 ## Everything is pure Nushell
 
 The module calls no external command and no library: not `openssl`, not `ssh-keygen`.
-SHA-512, the field arithmetic of Ed25519, PBKDF2 and the SSHSIG wire format are all written out in the module, which is why a derivation takes about 16 seconds.
-The one exception is SHA-256, which the BIP39 checksum and the fingerprint both need: that is Nushell's builtin `hash sha256`, not code you can read here.
+The field arithmetic of Ed25519, HMAC, PBKDF2 and the SSHSIG wire format are all written out in the module.
+The exceptions are the two hashes, which are Nushell builtins and not code you can read here:
+`hash sha256` for the BIP39 checksum and the fingerprint,
+and `hash sha512` for Ed25519, SSHSIG and PBKDF2.
+So the module needs Nushell 0.116 or later, the first with `hash sha512`;
+an older Nushell refuses to load it.
+A derivation takes about 1 second.
 The Ed25519 code is a straight port of tweetnacl's `nacl.js`, the same reference the page inlines, so an auditor can read the two side by side.
 Only the test suite reaches outside, and it does so on purpose: it runs the real `ssh-keygen` as an outside oracle, which is worth more than a self-consistent check.
 
@@ -44,7 +49,7 @@ Failures are raised with `error make`, not returned as a `{ok, error}` record th
 In a command-line tool the failure should stop the pipeline at its source.
 
 Mnemonic validation lives in one place, in `bip39 entropy` of `bip39.nu`, and `bip39 seed` calls it before doing any work.
-So a mistyped mnemonic never reaches PBKDF2, and a bad checksum fails at once instead of after the 16 seconds.
+So a mistyped mnemonic never reaches PBKDF2, and a bad checksum fails at once instead of after the derivation.
 The passphrase check is the exception and sits in `bip39 seed` itself.
 
 ## Input is read outside the line editor
@@ -134,7 +139,7 @@ The equivalent is `@example` attributes, which `--help` prints: four on `derive`
 
 Nothing runs them.
 They are documentation, and their point is that the check can be made by hand on the air-gapped machine, where no test toolchain exists: read `--help`, paste one in, compare what it prints with what is printed there.
-Each names the time to expect: about 16 seconds for a derivation, about 18 for the signing example and about 19 for the verifying one, nearly all of it the derivation each starts with.
+Each names the time to expect: about 1 second for a derivation, about 2 for the signing example and about 4 for the verifying one.
 
 The nutest suite stays what it is — a development-time check that needs the dev toolchain and cannot run on a bare air-gapped machine.
 

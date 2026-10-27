@@ -33,7 +33,7 @@ export def entropy [words: list<string>]: nothing -> list<int> {
 }
 
 # The 64-byte BIP39 seed: PBKDF2-HMAC-SHA512, 2048 rounds, over the words
-# joined by single spaces, with salt "mnemonic" + passphrase. About 14 s.
+# joined by single spaces, with salt "mnemonic" + passphrase.
 export def seed [words: list<string> passphrase: string = ""]: nothing -> list<int> {
   entropy $words | ignore
   # BIP39 asks for NFKD on both inputs and Nushell has no normalizer. The

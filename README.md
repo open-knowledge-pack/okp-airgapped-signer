@@ -65,12 +65,12 @@ which is Free Software under GPLv3:
 
 ## Nushell signer: `nu-okp-signer/`
 
-Pure Nushell, no external command and no library, so the air-gapped machine needs nothing but `nu`.
+Pure Nushell, no external command and no library, so the air-gapped machine needs nothing but `nu`, version 0.116 or later.
 From the repository root:
 
 ```
 use nu-okp-signer
-let key = nu-okp-signer derive              # prompts for the mnemonic and the passphrase, about 16 s
+let key = nu-okp-signer derive              # prompts for the mnemonic and the passphrase, about 1 s
 let sig = "text" | nu-okp-signer sign $key  # the SSHSIG block
 "text" | nu-okp-signer verify $key $sig     # true or false
 ```
