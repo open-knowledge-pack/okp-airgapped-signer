@@ -3,15 +3,19 @@ const { execFileSync } = require('child_process');
 const html = fs.readFileSync(path.join(__dirname, '..', 'js-okp-signer', 'index.html'), 'utf8');
 const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'file:///index.html', pretendToBeVisual: true });
 // The icons documented in specs/main.md. The fourth vector is tv1 under
-// the passphrase PROPHET, typed after the vector button has cleared the field.
+// the passphrase PROPHET, typed on Screen 2 and taken by Switch key.
 const ICONS = { tv1: '\u2570\u263a\u2557\u2659', tv2: '\u2550\u2588\u255d\u2690', tv3: '\u255a\u2588\u256f\u2318', 'tv1+PROPHET': '\u255a\u263b\u256f\u2659' };
 setTimeout(async () => {
   const doc = dom.window.document;
   for (const tv of ['tv1', 'tv2', 'tv3', 'tv1+PROPHET']) {
     doc.getElementById(tv.split('+')[0]).click();
-    if (tv.endsWith('+PROPHET')) doc.getElementById('passphrase').value = 'PROPHET';
     doc.getElementById('deriveBtn').click();
     await new Promise((r) => setTimeout(r, 500));
+    if (tv.endsWith('+PROPHET')) {
+      doc.getElementById('passphrase').value = 'PROPHET';
+      doc.getElementById('switchBtn').click();
+      await new Promise((r) => setTimeout(r, 500));
+    }
     doc.getElementById('exportPubBtn').click();
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fp-'));
     fs.writeFileSync(path.join(dir, 'key.pub'), doc.getElementById('pubQrPayload').textContent + '\n');

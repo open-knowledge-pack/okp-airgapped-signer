@@ -141,10 +141,12 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
   // A non-default passphrase changes the key.
   $('spSecret').value = 'banana colored duckling';
   $('spSite').value = 'wallet';
-  $('passphrase').value = 'x';
   $('deriveBtn').click();
-  await until(() => !$('screen2').classList.contains('hidden'), 'Screen 2 with a passphrase');
-  check('passphrase changes the key', $('fp').textContent === PINNED_FP, false);
+  await until(() => !$('screen2').classList.contains('hidden'), 'Screen 2 again');
+  check('Screen 1 opens on the blank-passphrase key', $('fp').textContent, PINNED_FP);
+  $('passphrase').value = 'x';
+  $('switchBtn').click();
+  await until(() => $('fp').textContent !== PINNED_FP, 'the key under a passphrase');
   check('same identicon under a passphrase', $('spIcon').textContent, '═█╗⛄');
   $('lockBtn').click();
 
@@ -163,7 +165,32 @@ const check = (name, actual, expected) => { assert.equal(actual, expected, name)
   await until(() => !$('screen2').classList.contains('hidden'), 'Screen 2 from words');
   check('no Spectre box in word mode', $('spectreBox').classList.contains('hidden'), true);
   check('no seed words block in word mode', $('seedWordsBox').classList.contains('hidden'), true);
+
+  // "Switch key" on Screen 2: PROPHET over tv1 must give the key the page
+  // pins for tv1+PROPHET, which its test-key banner names. A comparison with
+  // the same passphrase typed on Screen 1 would pass on a bug both share.
+  const fpTv1 = $('fp').textContent;
+  $('msg').value = 'hello';
+  $('signBtn').click();
+  check('a signature before the switch', $('sigQrPayload').textContent === '', false);
+  $('passphrase').value = 'PROPHET';
+  $('switchBtn').click();
+  check('the switch field empties once read', $('passphrase').value, '');
+  await until(() => $('testKeyWarn').textContent.includes('tv1+PROPHET'), 'the tv1+PROPHET key');
+  check('the switch changes the fingerprint', $('fp').textContent === fpTv1, false);
+  check('the switch takes the old signature away', $('sigQrPayload').textContent, '');
+  check('the switch takes the old signature QR away', $('sigQrImg').hasAttribute('src'), false);
+  $('switchBtn').click();
+  await until(() => $('fp').textContent === fpTv1, 'the blank-passphrase key again');
+  check('a blank switch gives the default key', $('fp').textContent, fpTv1);
+
+  // Clear & Lock while a switch runs: the new key must not come back.
+  $('passphrase').value = 'x';
+  $('switchBtn').click();
   $('lockBtn').click();
+  await until(() => !$('switchBtn').disabled, 'the switch to end');
+  check('a lock during a switch leaves no fingerprint', $('fp').textContent, '');
+  check('a lock during a switch stays on Screen 1', $('screen2').classList.contains('hidden'), true);
 
   // The page's own self-test, Spectre vector included.
   $('selfTestBtn').click();

@@ -238,30 +238,6 @@
         <div id="lastWordList"></div>
       </div>
     </div>
-    <!-- Why: passphrase is part of BIP39's threat model — same words +
-         different passphrase = different key. Field is mandatory in the
-         UI per spec; empty value is the canonical default.
-         Why type="password": a phone keyboard learns the words typed into
-         a text field and can sync what it learned, so a passphrase typed
-         there can leave the device. A password field is the one input the
-         keyboard does not learn from. Shoulder-surfing is still out of
-         scope; the field used to be type="text" so a typo could be seen,
-         and the "show" box below keeps that: tick it to read back what
-         was typed. Typing while it is ticked is typing into a text field
-         again, learning included. -->
-    <h2>BIP39 passphrase (optional)</h2>
-    <!-- Why autocomplete="new-password": a password field invites the
-         browser's password manager, which syncs. "off" is widely ignored on
-         password fields. "new-password" says "a new password, as when
-         creating an account", so saved passwords are not offered; a browser
-         may instead offer to generate one, or to save what was typed, and
-         the note under Derive, "decline", covers both. Whether a field outside any form
-         gets either offer is up to the browser and untested here. -->
-    <input id="passphrase" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false">
-    <label class="muted">
-      <input type="checkbox" id="showPassphrase">
-      Show, to check for typos
-    </label>
     <div id="seedErr" class="err"></div>
     <div>
       <button id="deriveBtn" class="primary">Derive Key</button>
@@ -270,13 +246,6 @@
         <button id="clearBtn">Clear words</button>
         <button id="lastWordBtn">Find word 24</button>
       </span>
-    </div>
-    <!-- Why below Derive: above it, the notes push the button off a phone screen. -->
-    <div class="muted">
-      Blank is the default. A passphrase is part of the key: lose it and
-      the key is lost. Type it hidden: a phone keyboard learns from a
-      visible field and may sync it. If the browser offers to save it,
-      decline: a saved password syncs too.
     </div>
     <details>
       <summary>Test vectors (development only)</summary>
@@ -333,6 +302,45 @@
       <div>Site, counter, version, and the identicon of the name and secret:</div>
       <div class="fp plain"><span id="spIdentity"></span> <span id="spIcon" class="icon"></span></div>
     </details>
+    <!-- Why the passphrase is on Screen 2 and not on Screen 1:
+         nu-cybergraph-csv wants one key per graph, and a secret typed
+         again for each graph is slow, with scrypt on top in Spectre mode. Screen 1 derives the key of the blank passphrase; the
+         words stay in memory for the session in both modes, so each
+         passphrase here gives its key with PBKDF2 alone. The passphrase is
+         key material, so the field empties once read, and the fingerprint
+         and its icon above name the key in use.
+         Why: passphrase is part of BIP39's threat model — same words +
+         different passphrase = different key. Field is mandatory in the
+         UI per spec; empty value is the canonical default.
+         Why type="password": a phone keyboard learns the words typed into
+         a text field and can sync what it learned, so a passphrase typed
+         there can leave the device. A password field is the one input the
+         keyboard does not learn from. Shoulder-surfing is still out of
+         scope; the "show" box below lets a typo be seen: tick it to read
+         back what was typed. Typing while it is ticked is typing into a
+         text field again, learning included. -->
+    <h2>BIP39 passphrase (optional)</h2>
+    <!-- Why autocomplete="new-password": a password field invites the
+         browser's password manager, which syncs. "off" is widely ignored on
+         password fields. "new-password" says "a new password, as when
+         creating an account", so saved passwords are not offered; a browser
+         may instead offer to generate one, or to save what was typed, and
+         the note under Switch key, "decline", covers both. Whether a field
+         outside any form gets either offer is up to the browser and
+         untested here. -->
+    <input id="passphrase" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <label class="muted">
+      <input type="checkbox" id="showPassphrase">
+      Show, to check for typos
+    </label>
+    <div id="switchErr" class="err"></div>
+    <button id="switchBtn">Switch key</button>
+    <div class="muted">
+      Blank is the default, and Screen 1 opens on its key. A passphrase is
+      part of the key: lose it and the key is lost. Type it hidden: a phone
+      keyboard learns from a visible field and may sync it. If the browser
+      offers to save it, decline: a saved password syncs too.
+    </div>
     <div>
       <button id="exportPubBtn">Export Public Key (QR)</button>
       <button id="lockBtn" class="danger">Clear &amp; Lock</button>
@@ -5180,9 +5188,9 @@ Cryptographic pipeline, end to end:
      we do NOT silently derive a different key from a "close" mnemonic.
   3. The mnemonic string (lowercase, NFKD-normalized, single-space-joined) is
      stretched with PBKDF2-HMAC-SHA512, 2048 iterations, salt = "mnemonic" +
-     the passphrase typed on Screen 1, which may be blank and is blank for
-     the documented test vectors, output length 64 bytes. This is the standard
-     BIP39 seed. PBKDF2/HMAC/SHA-256 are implemented in pure JS (see the
+     the passphrase typed on Screen 2, blank for the key Screen 1 opens on
+     and for the documented test vectors, output
+     length 64 bytes. This is the standard BIP39 seed. PBKDF2/HMAC/SHA-256 are implemented in pure JS (see the
      PURE-JS CRYPTO block above) rather than via `crypto.subtle`, so the page
      works even on browsers that don't expose SubtleCrypto on `file://`.
   4. We take the FIRST 32 BYTES of that 64-byte seed as the Ed25519 seed and
@@ -5552,18 +5560,20 @@ async function spectreSeedWords(name, secret, version, site, counter, onProgress
 
 let SECRET_KEY = null; // Uint8Array(64)  (Ed25519 expanded secret)
 let PUBLIC_KEY = null; // Uint8Array(32)
-let SEED32     = null; // Uint8Array(32)  (BIP39 seed first half; wiped immediately after fromSeed — see deriveKey)
+// The 24 words, in both modes, for "Switch key" on Screen 2. They are
+// strings, so dropping the reference is all that can be done.
+let WORDS      = null;
 // Spectre mode only: version, site, counter, the identicon and the 24
 // words, for the identity line and the "Show seed words" button on Screen 2.
 // The words are strings, so dropping the reference is all that can be done.
 let SPECTRE    = null;
 
 function zeroAll() {
-  // What this wipes: the three buffers below. What the derivation path
+  // What this wipes: the two buffers below. What the derivation path
   // wipes on its own, as soon as each is done with: the 33 index bytes in
   // validateMnemonic24, the password and salt bytes in bip39Seed, the pads
   // and working buffers in hmacSha512 and pbkdf2HmacSha512, the unused half
-  // of the BIP39 seed and the 32-byte Ed25519 seed in deriveKey.
+  // of the BIP39 seed and the 32-byte Ed25519 seed in keyPairFromWords.
   // What nothing here can wipe: the mnemonic, its 24 words and the
   // passphrase, which are JavaScript strings, immutable, and live until the
   // garbage collector drops them, and in Spectre mode the secret string too;
@@ -5575,9 +5585,8 @@ function zeroAll() {
   // So a wipe here shortens the life of the key material; it does not end it.
   if (SECRET_KEY) SECRET_KEY.fill(0);
   if (PUBLIC_KEY) PUBLIC_KEY.fill(0);
-  if (SEED32)     SEED32.fill(0);
-  SECRET_KEY = PUBLIC_KEY = SEED32 = null;
-  SPECTRE = null;
+  SECRET_KEY = PUBLIC_KEY = null;
+  WORDS = SPECTRE = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -5853,10 +5862,6 @@ for (const v of TEST_VECTORS) {
   $(v.id).addEventListener('click', () => {
     setMode(false);
     fillWords(v.mnemonic);
-    // Why: documented test-vector pubkeys are at empty passphrase. A stale
-    // non-empty passphrase from a prior interaction would silently derive a
-    // different key. Mirrors the paste-clears-stale-words behavior.
-    $('passphrase').value = '';
   });
 }
 
@@ -5868,8 +5873,6 @@ $('spTv').addEventListener('click', () => {
   $('spVersion').value = String(v.version);
   $('spSite').value = v.site;
   $('spCounter').value = String(v.counter);
-  // The pinned key is at the blank passphrase, as for the word vectors.
-  $('passphrase').value = '';
 });
 
 // Self-test: derive each test vector through the page's actual pipeline and
@@ -5953,6 +5956,21 @@ $('showPassphrase').addEventListener('change', (e) => {
 
 $('deriveBtn').addEventListener('click', deriveKey);
 
+// Steps 3 and 4 of the pipeline, for Screen 1 and for "Switch key".
+async function keyPairFromWords(words, passphrase) {
+  // Why pass passphrase: same words + different passphrase = different
+  // key (BIP39's mechanism for multiple identities behind one mnemonic).
+  const seed64 = await bip39Seed(words, passphrase);
+  const seed32 = seed64.slice(0, 32);
+  // Wipe the unused high half of the BIP39 seed eagerly.
+  seed64.fill(0);
+  const kp = nacl.sign.keyPair.fromSeed(seed32);
+  // fromSeed has copied the seed into kp.secretKey's first 32 bytes; wipe
+  // it now rather than at Clear & Lock, so it lives the shortest time.
+  seed32.fill(0);
+  return kp;
+}
+
 async function deriveKey() {
   // Why the button's state is the lock: a click cannot arrive while the
   // button is disabled, but Enter in field 24 calls this directly, and a
@@ -5988,8 +6006,6 @@ async function deriveKey() {
     if (!v.ok) { seedErr.textContent = v.error; return; }
   }
 
-  // Read verbatim: no trim, no normalize — NFKD happens inside bip39Seed.
-  const passphrase = $('passphrase').value;
 
   // Pure-JS PBKDF2 blocks the main thread for ~100–500 ms. Disable the button
   // and show "Deriving…" so the user gets feedback that work is happening;
@@ -6012,22 +6028,12 @@ async function deriveKey() {
       if (!v.ok) throw new Error('the Spectre words fail their own checksum: ' + v.error);
       btn.textContent = 'Deriving…';
     }
-    // Step 3: PBKDF2 seed.
-    // Why pass passphrase: same words + different passphrase = different
-    // key (BIP39's mechanism for multiple identities behind one mnemonic).
-    const seed64 = await bip39Seed(words, passphrase);
-    // Step 4: first 32 bytes → Ed25519 seed.
-    SEED32 = seed64.slice(0, 32);
-    // Wipe the unused high half of the BIP39 seed eagerly.
-    seed64.fill(0);
-    const kp = nacl.sign.keyPair.fromSeed(SEED32);
-    // fromSeed has copied SEED32 into kp.secretKey's first 32 bytes; wipe SEED32
-    // now rather than waiting for Clear & Lock so the seed lives the shortest
-    // possible time. zeroAll() is null-safe, so this is fine on the lock path too.
-    SEED32.fill(0);
-    SEED32 = null;
+    // Screen 1 opens on the key of the blank passphrase; Switch key on
+    // Screen 2 takes the others.
+    const kp = await keyPairFromWords(words, '');
     PUBLIC_KEY = kp.publicKey;
     SECRET_KEY = kp.secretKey;
+    WORDS = words;
     SPECTRE = spectreMode ? {
       words: words, identicon: identicon,
       version: sp.version, site: sp.site, counter: sp.counter,
@@ -6094,6 +6100,7 @@ function enterScreen2() {
   $('msg').value = '';
   $('msgDigest').textContent = '';
   $('signErr').textContent = '';
+  $('switchErr').textContent = '';
   closeQrViews();
 
   // If the derived pub matches a documented BIP39 test-vector pub, surface
@@ -6268,6 +6275,68 @@ $('copyWordsBtn').addEventListener('click', async () => {
   if (COPIED_WORDS) status.textContent = text;
 });
 
+// Remove the public-key fingerprint, its icon and any QR data URLs from the
+// DOM: all of it names a key that is no longer in use.
+function clearKeyOutputs() {
+  $('fp').textContent = '';
+  $('icon').textContent = '';
+  $('pubQrImg').removeAttribute('src');
+  $('sigQrImg').removeAttribute('src');
+  $('pubQrPayload').textContent = '';
+  $('sigQrPayload').textContent = '';
+  $('pubQrFp').textContent = '';
+  $('sigQrFp').textContent = '';
+  $('sigQrNs').textContent = '';
+  $('sigQrDigest').textContent = '';
+}
+
+// Another key from the words in memory: only the passphrase changes.
+// Why the button's state is the lock: Enter in the field calls this
+// directly, as in deriveKey.
+async function switchKey() {
+  const btn = $('switchBtn');
+  if (btn.disabled || !WORDS) return;
+  const words = WORDS;
+  // Read verbatim: no trim, no normalize — NFKD happens inside bip39Seed.
+  const passphrase = $('passphrase').value;
+  $('passphrase').value = '';
+  $('switchErr').textContent = '';
+  btn.disabled = true;
+  btn.textContent = 'Deriving…';
+  let installed = false;
+  try {
+    const kp = await keyPairFromWords(words, passphrase);
+    // Why the check: Clear & Lock stays live while this runs, and the key
+    // it dropped must not come back.
+    if (WORDS !== words) { kp.secretKey.fill(0); kp.publicKey.fill(0); return; }
+    // Why after the derivation: a throw in it leaves the old key in place,
+    // under its own fingerprint.
+    SECRET_KEY.fill(0);
+    PUBLIC_KEY.fill(0);
+    SECRET_KEY = kp.secretKey;
+    PUBLIC_KEY = kp.publicKey;
+    installed = true;
+    clearKeyOutputs();
+    enterScreen2();
+  } catch (e) {
+    // Why lock after the install: a throw in enterScreen2 leaves the new
+    // key under a screen not set up for it, as in deriveKey.
+    if (installed) {
+      $('lockBtn').click();
+      seedErr.textContent = 'derivation failed: ' + errorText(e);
+    } else {
+      $('switchErr').textContent = 'derivation failed: ' + errorText(e);
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Switch key';
+  }
+}
+$('switchBtn').addEventListener('click', switchKey);
+$('passphrase').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); switchKey(); }
+});
+
 $('lockBtn').addEventListener('click', () => {
   zeroAll();
   hideSeedWords();
@@ -6282,17 +6351,7 @@ $('lockBtn').addEventListener('click', () => {
   $('seedWordsBox').classList.add('hidden');
   $('seedWordsBox').open = false;
   $('spectreBox').open = false;
-  // Remove the public-key fingerprint, its icon and any QR data URLs from the DOM.
-  $('fp').textContent = '';
-  $('icon').textContent = '';
-  $('pubQrImg').removeAttribute('src');
-  $('sigQrImg').removeAttribute('src');
-  $('pubQrPayload').textContent = '';
-  $('sigQrPayload').textContent = '';
-  $('pubQrFp').textContent = '';
-  $('sigQrFp').textContent = '';
-  $('sigQrNs').textContent = '';
-  $('sigQrDigest').textContent = '';
+  clearKeyOutputs();
   $('msg').value = '';
   $('msgDigest').textContent = '';
   $('asFile').checked = true;
